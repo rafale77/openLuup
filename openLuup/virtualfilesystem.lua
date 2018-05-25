@@ -218,13 +218,22 @@ local I_openLuup_impl = [[
         EmptyTrash (lul_settings)
       </job>
     </action>
-    
+
     <action>
       <serviceId>openLuup</serviceId>
       <name>SetHouseMode</name>
       <run>
         local sid = "urn:micasaverde-com:serviceId:HomeAutomationGateway1"
         luup.call_action (sid, "SetHouseMode", lul_settings)
+      </run>
+    </action>
+
+    <action>    <!-- added by @rafale77 -->
+      <serviceId>openLuup</serviceId>
+      <name>RunScene</name>
+      <run>
+        local sid = "urn:micasaverde-com:serviceId:HomeAutomationGateway1"
+        luup.call_action(sid, "RunScene", {SceneNum = lul_settings.SceneNum}, 0)
       </run>
     </action>
   
@@ -288,12 +297,22 @@ local S_openLuup_svc = [[
         </argument>
       </argumentList>
     </action>
-  
+
     <action>
       <name>SetHouseMode</name>
       <argumentList>
         <argument>
           <name>Mode</name>
+          <direction>in</direction>
+        </argument>
+      </argumentList>
+    </action>
+    
+    <action>    <!-- added by @rafale77 -->
+      <name>RunScene</name>
+      <argumentList>
+        <argument>
+          <name>SceneNum</name>
           <direction>in</direction>
         </argument>
       </argumentList>
@@ -605,6 +624,7 @@ local I_VeraBridge_impl = [[
   <files>openLuup/L_VeraBridge.lua</files>
   <startup>init</startup>
   <actionList>
+    
     <action>
   		<serviceId>urn:akbooer-com:serviceId:VeraBridge1</serviceId>
   		<name>GetVeraFiles</name>
@@ -613,6 +633,7 @@ local I_VeraBridge_impl = [[
   			return 4,0
   		</job>
     </action>
+    
     <action>
   		<serviceId>urn:akbooer-com:serviceId:VeraBridge1</serviceId>
   		<name>GetVeraScenes</name>
@@ -621,6 +642,17 @@ local I_VeraBridge_impl = [[
   			return 4,0
   		</job>
     </action>
+    
+    <action>
+      <!-- added here to allow scenes to access this as an action (Device 0 is not visible) -->
+  		<serviceId>urn:akbooer-com:serviceId:VeraBridge1</serviceId>
+  		<name>SetHouseMode</name>
+  		<job>
+  			SetHouseMode (lul_settings)
+  			return 4,0
+  		</job>
+    </action>
+  
   </actionList>
 </implementation>
 ]]
@@ -633,11 +665,16 @@ local S_VeraBridge_svc = [[
     <minor>0</minor>
   </specVersion>
   <actionList>
+    <action> <name>GetVeraFiles</name> </action>
+    <action> <name>GetVeraScenes</name> </action>
     <action>
-      <name>GetVeraFiles</name>
-    </action>
-    <action>
-      <name>GetVeraScenes</name>
+      <name>SetHouseMode</name>
+      <argumentList>
+        <argument>
+          <name>Mode</name>
+          <direction>in</direction>
+        </argument>
+      </argumentList>
     </action>
   </actionList>
 </scpd>
@@ -933,6 +970,45 @@ local I_openLuupCamera1_xml = [[
 </implementation>
 ]]
 
+-- Security Sensor devices
+local I_openLuupSecuritySensor1_xml = [[
+<?xml version="1.0"?>
+<implementation>
+  <functions>
+  local sid = "urn:micasaverde-com:serviceId:SecuritySensor1"
+
+  function get (name)
+    return (luup.variable_get (sid, name, lul_device))
+  end
+
+  function set (name, val)
+    if val ~= get (name) then
+      luup.variable_set (sid, name, val, lul_device)
+    end
+  end
+
+  function ArmedTrippedCheck()
+    if get "Armed" == '1' and get "Tripped" == '1' then set ("ArmedTripped", '1')
+    else set ("ArmedTripped", '0')
+    end
+  end
+
+  function startup()
+    luup.variable_watch("ArmedTrippedCheck", "Tripped", sid, lul_device)
+  end
+  </functions>
+  <actionList>
+	  <action>
+	  <serviceId>urn:micasaverde-com:serviceId:SecuritySensor1</serviceId>
+	  <name>SetArmed</name>
+	  <run>
+        set ("Armed", lul_settings.newArmedValue)
+	  </run>
+	  </action>
+  </actionList>
+  <startup>startup</startup>
+</implementation>
+]]
 -----
 --
 -- DataYours schema and aggregation definitions for AltUI DataStorage Provider
