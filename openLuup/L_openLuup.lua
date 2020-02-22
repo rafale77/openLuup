@@ -1,13 +1,13 @@
 ABOUT = {
   NAME          = "L_openLuup",
-  VERSION       = "2019.07.25",
+  VERSION       = "2020.02.22",
   DESCRIPTION   = "openLuup device plugin for openLuup!!",
   AUTHOR        = "@akbooer",
-  COPYRIGHT     = "(c) 2013-2019 AKBooer",
+  COPYRIGHT     = "(c) 2013-2020 AKBooer",
   DOCUMENTATION = "https://github.com/akbooer/openLuup/tree/master/Documentation",
   DEBUG         = false,
   LICENSE       = [[
-  Copyright 2013-2019 AK Booer
+  Copyright 2013-2020 AK Booer
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -57,6 +57,8 @@ ABOUT = {
 -- 2018.08.30  fixed nil ctype in openLuup_images (thanks @ramwal)
 
 -- 2019.04.18  remove generic plugin_configuration functionality (no longer required)
+
+-- 2020.02.20  add EmptyRoom101 service action
 
 
 local json        = require "openLuup.json"
@@ -414,6 +416,22 @@ function EmptyTrash (p)
       end
     end
     luup.log (n .. " files permanently deleted from trash")
+  end
+end
+
+
+function EmptyRoom101 (p)           -- 2020.02.20
+  local yes = p.AreYouSure or ''
+  if yes: lower() == "yes" then
+    local n = 0
+    luup.log "deleting devices in Room 101..."
+    for devNo,d in pairs (luup.devices) do
+      if d.room_num == 101 then
+        luup.devices[devNo] = nil
+        n = n + 1
+      end
+    end
+    luup.log (n .. " devices deleted")
   end
 end
 

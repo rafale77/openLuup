@@ -1,4 +1,4 @@
-local VERSION = "2019.06.11"
+local VERSION = "2019.08.01"
 
 -- mimetypes
 -- 2016/04/14
@@ -145,9 +145,9 @@ local cgi_prefix = {
     "cgi-bin",      -- ditto
     
     "console",      -- openLuup console interface
-    "openUI",       -- console alias
+    "openLuup",     -- console alias
     
-    "dashboard",    -- for graphite_api (requires DataYours plugin)
+    "dashboard",    -- for graphite_api
     "metrics",      -- ditto
     "render",       -- ditto
     
@@ -164,7 +164,7 @@ local cgi_alias = setmetatable ({
     ["cgi-bin/cmh/backup.sh"]     = "openLuup/backup.lua",
     ["cgi-bin/cmh/sysinfo.sh"]    = "openLuup/sysinfo.lua",
     ["console"]                   = "openLuup/console.lua",
-    ["openUI"]                    = "cgi/openUI.lua",
+    ["openLuup"]                  = "openLuup/console.lua",
     
     -- graphite_api support
     ["metrics"]             = graphite_cgi,
@@ -191,7 +191,7 @@ local dir_alias = {
     ["cmh/skins/default/img/icons/"] = "icons/" ,                 -- 2017.11.14 
   }
  
--- cache retentions (sed by file servlet)
+-- cache retentions (used by file servlet)
 local cache_control = {                 -- 2019.05.14  max-age in seconds indexed by filetype
   png = 3600, 
   svg = 3600, 

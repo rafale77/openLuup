@@ -1,12 +1,12 @@
 local ABOUT = {
   NAME          = "openLuup.requests",
-  VERSION       = "2019.07.14",
+  VERSION       = "2020.02.05",
   DESCRIPTION   = "Luup Requests, as documented at http://wiki.mios.com/index.php/Luup_Requests",
   AUTHOR        = "@akbooer",
-  COPYRIGHT     = "(c) 2013-2019 AKBooer",
+  COPYRIGHT     = "(c) 2013-2020 AKBooer",
   DOCUMENTATION = "https://github.com/akbooer/openLuup/tree/master/Documentation",
   LICENSE       = [[
-  Copyright 2013-2019 AK Booer
+  Copyright 2013-2020 AK Booer
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -69,9 +69,15 @@ local ABOUT = {
 -- 2019.05.10  use device:get_shortcodes() in sdata_devices_table()
 -- 2019.05.12  use device:state_table() in status_devices_table()
 -- 2017.07.15  encode action request XML response from scratch, using new XML document constructor
+-- 2019.07.31  use new client and server modules (http split into two)
+-- 2019.11.29  update test request to show client socket id (if present)
+
+-- 2020.01.27  object-oriented scene:rename() rather than scene.rename()
+-- 2020.02.05  object-oriented dev:rename() in device request
 
 
-local http          = require "openLuup.http"
+local client        = require "openLuup.client"
+local server        = require "openLuup.server"
 local json          = require "openLuup.json"
 local scheduler     = require "openLuup.scheduler"
 local devutil       = require "openLuup.devices"      -- for dataversion
@@ -143,7 +149,7 @@ end
 
 local function iprequests_table () 
   local info = {}
-  for _,x in pairs (http.iprequests) do
+  for _,x in pairs (server.iprequests) do
     info[#info + 1] = x
   end
   return info 
@@ -170,23 +176,13 @@ end
 --   http://ip_address:3480/data_request?id=device&action=delete&device=5
 --
 -- TODO: add better status messages
+-- TODO: move rename and delete to device object/class?
 local function device (_,p)
   local devNo = tonumber (p.device)
   local dev = luup.devices[devNo]
 
   local function rename ()
-    if p.name then
-      dev.description = p.name
-      dev.attributes.name = p.name
-    end
-    if p.room then
-      local idx = {}
-      for i,room in pairs(luup.rooms) do
-        idx[room] = i
-      end
-      dev.room_num = tonumber(p.room) or idx[p.room] or 0
-      dev.attributes.room = tostring(dev.room_num)        -- 2018.07.02
-    end
+    if dev then dev: rename (p.name, p.room) end      -- 2020.02.05
   end
   local function delete ()
     local tag = {}                -- list of devices to delete
@@ -520,7 +516,7 @@ local category_filter = {      -- no idea what this is, but AltUI seems to need 
 local function user_scenes_table()
   local scenes = {}
   for _,sc in pairs (luup.scenes) do
-    scenes[#scenes+1] = sc.user_table()
+    scenes[#scenes+1] = sc.definition
   end
   return scenes
 end
@@ -625,15 +621,14 @@ local function scene (_,p)
   --Example: http://ip_address:3480/data_request?id=scene&action=delete&scene=5
   local function delete (scene) 
     if scene then 
-      scene:stop()                             -- stop scene triggers and timers
-      luup.scenes[scene.user_table().id] = nil -- remove reference to the scene
+      scenes.delete (scene.definition.id) -- remove reference to the scene
     end
   end
   --Example: http://ip_address:3480/data_request?id=scene&action=create&json=[valid json data]
   local function create () 
     local new_scene, msg = scenes.create (p.json)
     if new_scene then
-      local id = new_scene.user_table().id
+      local id = new_scene.definition.id
       if luup.scenes[id] then
         delete (luup.scenes[id])               -- remove the old scene with this id
       end
@@ -649,14 +644,11 @@ local function scene (_,p)
       for i, name in pairs (luup.rooms) do room_index[name] = i end
       new_room_num = room_index[room]
     end
-    if scene then scene.rename (name, new_room_num) end
+    if scene then scene: rename (name, new_room_num) end    -- 2020.01.27
   end
   --Example: http://ip_address:3480/data_request?id=scene&action=list&scene=5
   local function list (scene)
-    if scene and scene.user_table then
-      return json.encode (scene.user_table()) or "ERROR"
-    end
-    return "ERROR"
+    return scene and tostring (scene) or "ERROR"            -- 2020.01.27
   end
   local function noop () return "ERROR" end
 
@@ -961,7 +953,7 @@ local function lua ()    -- 2018.04.22
 
   -- scenes
   for i,s in pairs (luup.scenes) do
-      local lua = s:user_table().lua
+      local lua = s.definition.lua or ''
       if #lua > 0 then
           pr ("function scene_" .. i .. "()")
           pr (lua)
@@ -980,7 +972,7 @@ local function alive () return "OK" end
 
 -- file access
 local function file (_,p) 
-  local _,f = http.wget ("http://localhost:3480/" .. (p.parameters or '')) 
+  local _,f = client.wget ("http://localhost:3480/" .. (p.parameters or '')) 
   return f 
 end
 
@@ -990,10 +982,14 @@ local function reload () luup.reload () end
 --
 -- openLuup additions
 --
-local function test (r,p)
-  local d = {"data_request","id=" .. r}   -- 2017.11.08
+local function test (r,p,f,c)
+  local d = {
+    "data_request:  id=" .. r,          -- 2017.11.08
+    "output_format: " .. tostring(f),
+    "client_socket: " .. tostring(c),   -- 2019.11.29
+    "user_parameters:"}
   for a,b in pairs (p) do
-    d[#d+1] = table.concat {a,'=',b}
+    d[#d+1] = table.concat {'  ',a,'=',b}
   end
   return table.concat (d,'\n')
 end
@@ -1063,7 +1059,7 @@ do -- CALLBACK HANDLERS
   for name, proc in pairs (openLuup_specials) do  -- no compatibility mode for these!
     extendedList[name] = proc
   end
-  http.add_callback_handlers (extendedList)     -- tell the HTTP server to use these callbacks
+  server.add_callback_handlers (extendedList)     -- tell the HTTP server to use these callbacks
 end
 
 luup_requests.ABOUT = ABOUT   -- add module info (NOT part of request list!)

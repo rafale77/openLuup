@@ -1,6 +1,6 @@
 local ABOUT = {
   NAME          = "openLuup.wsapi",
-  VERSION       = "2019.07.17",
+  VERSION       = "2019.08.12",
   DESCRIPTION   = "a WSAPI application connector for the openLuup port 3480 server",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2019 AKBooer",
@@ -36,7 +36,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 ]]
 }
 
--- This module implements a WSAPI application connector for the openLuup port 3480 server.
+-- This module implements a WSAPI (Web Server API) application connector for the openLuup port 3480 server.
 --
 -- see: http://keplerproject.github.io/wsapi/
 -- and: http://keplerproject.github.io/wsapi/license.html
@@ -57,12 +57,14 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 -- 2016.10.17  use CGI aliases from external servertables module
 
 -- 2017.01.12  remove leading colon from REMOTE_PORT metavariable value
+
 -- 2018.07.14  improve error handling when calling CGI
 -- 2018.07.20  add the Kepler project request and response libraries
 -- 2018.07.27  export the util module with url_encode() and url_decode()
 
 -- 2019.05.06  improve CGI .lua log message
--- 2019.07.17  include complete WSAPI util module rather then socket.url (to decode '+' signs correctly)
+-- 2019.07.17  include complete WSAPI util module rather than socket.url (to decode '+' signs correctly)
+-- 2019.07.28  create global make_env(), used by HTTP server to include in request objects
 
 
 --[[
@@ -226,17 +228,14 @@ SERVER_NAME 	  Your server's fully qualified domain name (e.g. www.cgi101.com)
 SERVER_PORT 	  The port number your server is listening on
 SERVER_SOFTWARE The server software you're using (e.g. Apache 1.3)
 
-
 --]]
--- cgi is called by the server when it receives a GET or POST CGI request
--- request object parameter:
--- { {url.parse structure} , {headers}, post_content_string, method_string, http_version_string }
 
-local function cgi (request)
-  
-  local URL = request.URL
-  local headers = request.headers
-  local post_content = request.post_content
+-- build a WSAPI environment from parameters:
+--      url.path, url.query , {headers}, post_content_string, method_string, http_version_string 
+-- only the first parameter is required
+local function make_env (path, query, headers, post_content, method, http_version)
+  headers = headers or {}
+  post_content = post_content or ''
   
   local meta = {
     __index = function () return '' end;  -- return the empty string instead of nil for undefined metavariables
@@ -255,7 +254,7 @@ local function cgi (request)
   
   local error = {
     write = function (self, ...) 
-      local msg = {URL.path or '?', ':', ...}
+      local msg = {path or '?', ':', ...}
       for i, m in ipairs(msg) do msg[i] = tostring(m) end             -- ensure everything is a string
       _log (table.concat (msg, ' '), "openLuup.wsapi.cgi") 
     end;
@@ -265,27 +264,30 @@ local function cgi (request)
     
     TEST = {headers = headers},     -- so that test CGIs (or unit tests) can examine all the headers
     
+    -- note that the metatable will return an empty string for any undefined environment parameters
     ["CONTENT_LENGTH"]  = #post_content,
-    ["CONTENT_TYPE"]    = headers["Content-Type"] or '',
+    ["CONTENT_TYPE"]    = headers["Content-Type"],
     ["HTTP_USER_AGENT"] = headers["User-Agent"],
     ["HTTP_COOKIE"]     = headers["Cookie"],
     ["REMOTE_HOST"]     = headers ["Host"],
     ["REMOTE_PORT"]     = (headers ["Host"] or ''): match ":(%d+)$",
-    ["REQUEST_METHOD"]  = request.method,
-    ["SCRIPT_NAME"]     = URL.path,
-    ["SERVER_PROTOCOL"] = request.http_version,
+    ["REQUEST_METHOD"]  = method or "GET",
+    ["SCRIPT_NAME"]     = path,
+    ["SERVER_PROTOCOL"] = http_version or "HTTP/1.1",
     ["PATH_INFO"]       = '/',
-    ["QUERY_STRING"]    = URL.query,
+    ["QUERY_STRING"]    = query,
   
     -- methods
     input = input,
     error = error,
   }
   
-  local wsapi_env = setmetatable (env, meta)
-   
-  -- execute the CGI
-  local script = URL.path or ''  
+  return setmetatable (env, meta)
+end
+
+-- cgi is called by the server when it receives a GET or POST CGI request
+local function cgi (wsapi_env)       -- 2019.07.28  now called with a pre-built environment!
+  local script = wsapi_env.SCRIPT_NAME  
   
   script = script: match "^/?(.-)/?$"      -- ignore leading and trailing '/'
   
@@ -306,11 +308,7 @@ local function cgi (request)
     _log ("ERROR: " .. message)
     status = 500    -- Internal server error
     responseHeaders = { ["Content-Type"] = "text/plain" }
-    iterator = function ()
-      local line = message
-      message = nil
-      return line
-    end
+    iterator = function () local x = message; message = nil; return x end
   end
 
   return status, responseHeaders, iterator
@@ -926,7 +924,8 @@ return {
     ABOUT = ABOUT,
     TEST  = {build = build},        -- access to 'build' for testing
      
-    cgi   = cgi,                    -- called by the server to process a CGI request
+    cgi       = cgi,                -- called by the server to process a CGI request
+    make_env  = make_env,           -- create wsapi_env from basic HTTP request
     
     -- modules
     

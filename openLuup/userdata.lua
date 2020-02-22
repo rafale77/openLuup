@@ -1,13 +1,13 @@
 local ABOUT = {
   NAME          = "openLuup.userdata",
-  VERSION       = "2019.06.11",
+  VERSION       = "2020.01.28",
   DESCRIPTION   = "user_data saving and loading, plus utility functions used by HTTP requests",
   AUTHOR        = "@akbooer",
-  COPYRIGHT     = "(c) 2013-2019 AKBooer",
+  COPYRIGHT     = "(c) 2013-2020 AKBooer",
   DOCUMENTATION = "https://github.com/akbooer/openLuup/tree/master/Documentation",
   DEBUG         = false,
   LICENSE       = [[
-  Copyright 2013-2019 AK Booer
+  Copyright 2013-2020 AK Booer
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -65,6 +65,11 @@ local ABOUT = {
 -- 2019.05.03   don't load device attribute cpu(s)
 -- 2019.05.12   use device:state_table() in devices_table()
 -- 2019.05.31   update openLuup help URL to new Vera community forum
+-- 2019.08.25   use local .svg icons for openLuup, AltAppStore, and VeraBridge plugins
+-- 2019.10.19   add modelID attribute, per latest Vera firmware (7.30)
+-- 2019.11.28   add openLuup table to saved user_data (for continuity of parameter settings between reloads)
+
+-- 2020.01.28   replace scene:user_table() with scene.definition, following object changes in scenes
 
 
 local json    = require "openLuup.json"
@@ -157,6 +162,7 @@ luup.log "startup code completed"
   mode_change_mode = '',
   mode_change_time = '',
   model = "Not a Vera",
+  modelID = 0,
 --  net_pnp = "0",
 --  overview_tabs = {},
 --  rooms = {},
@@ -180,7 +186,7 @@ luup.log "startup code completed"
 -- openLuup specials
 
   ShutdownCode = '',
-  
+
   LuaTestCode  = '',    -- 2019.06.11
   LuaTestCode2 = '',
   LuaTestCode3 = '',
@@ -203,7 +209,8 @@ local preinstalled = {
     {
       AllowMultiple   = "0",
       Title           = "openLuup",
-      Icon            = "https://avatars.githubusercontent.com/u/4962913",
+--      Icon            = "https://avatars.githubusercontent.com/u/4962913",
+      Icon            = "icons/openLuup.svg",
       Instructions    = "https://community.getvera.com/c/plugins-and-plugin-development/openluup",
       AutoUpdate      = "0",
       VersionMajor    = '',
@@ -266,7 +273,7 @@ local preinstalled = {
     {
       AllowMultiple   = "0",
       Title           = "Alternate App Store",
-      Icon            = "https://raw.githubusercontent.com/akbooer/AltAppStore/master/AltAppStore.png",
+      Icon            = "icons/AltAppStore.svg",
       Instructions    = "https://github.com/akbooer/AltAppStore",
       AutoUpdate      = "0",
       VersionMajor    = '',
@@ -298,7 +305,8 @@ local preinstalled = {
     {
       AllowMultiple   = "1",
       Title           = "VeraBridge",
-      Icon            = "https://raw.githubusercontent.com/akbooer/openLuup/master/icons/VeraBridge.png",
+--      Icon            = "https://raw.githubusercontent.com/akbooer/openLuup/master/icons/VeraBridge.png",
+      Icon            = "icons/VeraBridge.svg",
       Instructions    = "http://forum.micasaverde.com/index.php/board,79.0.html",
       AutoUpdate      = "0",
       VersionMajor    = "not",
@@ -704,6 +712,8 @@ local function json_user_data (localLuup)   -- refactored thanks to @explorer
   for a,b in pairs (attributes) do
     if type(b) ~= "table" then data[a] = b end
   end
+  -- openLuup table attribute
+  data.openLuup = attributes.openLuup         -- 2019.11.28
   -- devices
   data.devices = devices_table (luup.devices or {})
   -- plugins
@@ -716,8 +726,8 @@ local function json_user_data (localLuup)   -- refactored thanks to @explorer
   -- scenes
   local scenes = data.scenes
   for _, s in pairs (luup.scenes or {}) do
-    scenes[#scenes+1] = s: user_table ()
-  end
+    scenes[#scenes+1] = s.definition
+  end    
   --
   return json.encode (data)   -- json text or nil, error message if any
 end
