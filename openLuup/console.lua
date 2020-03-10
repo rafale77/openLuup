@@ -5,7 +5,7 @@ module(..., package.seeall)
 
 ABOUT = {
   NAME          = "console.lua",
-  VERSION       = "2020.02.19",
+  VERSION       = "2020.03.10",
   DESCRIPTION   = "console UI for openLuup",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2020 AKBooer",
@@ -75,6 +75,8 @@ ABOUT = {
 -- 2020.02.05  use object-oriented dev:rename() rather than call to requests
 -- 2020.02.12  add altid to Devices table (thanks @DesT)
 -- 2020.02.19  fix missing discontiguous items in xselect() menu choices
+-- 2020.03.08  added creation time to scenes table (thanks @DesT)
+-- 2020.03.10  add "Move to Trash" button for orphaned historian files
 
 
 --  WSAPI Lua CGI implementation
@@ -452,13 +454,21 @@ local function device_sort (p)
   return filter_menu ({"Sort by Name", "Sort by Id"}, p.dev_sort, "dev_sort=")
 end
 
+local function scene_sort (p)
+  return filter_menu ({"Sort by Name", "Sort by Id", "Sort by Date"}, p.dev_sort, "dev_sort=")
+end
+
 -- returns an iterator which sorts items, key= "Sort by Name" or "Sort by Id" 
 -- works for devices, scenes, and variables
 local function sorted_by_id_or_name (p, tbl)  -- _or_description
+  local sort_options = {
+    ["Sort by Id"]    = function (_, id) return id end,   -- NB: NOT the same as x.id (which is altid)!
+    ["Sort by Name"]  = function (x) return x.description or x.name end,    -- name is for variables
+    ["Sort by Date"]  = function (x) return -((x.definition or empty).Timestamp or 0) end} -- for scenes only
+  local sort_index = sort_options[p.dev_sort] or function () end
   local x = {}
-  local by_name = p.dev_sort == "Sort by Name"
   for id, item in pairs (tbl) do 
-    x[#x+1] = {item = item, key = by_name and (item.description or item.name) or id} 
+    x[#x+1] = {item = item, key = sort_index(item, id) or id} 
   end
   table.sort (x, function (a,b) return a.key < b.key end)
   local i = 0
@@ -532,7 +542,7 @@ end
 -- make a drop-down selection for things
 local function xselect (hidden, options, selected, presets)
   local sorted = {}
-  for n,v in pairs (options or empty) do sorted[#sorted+1]  = v end
+  for _,v in pairs (options or empty) do sorted[#sorted+1]  = v end
   table.sort (sorted)
   local choices = xhtml.select {style="width:12em;", name="value", onchange="this.form.submit()"} 
   local function choice(x) 
@@ -1435,11 +1445,13 @@ local function database_tables ()
   t.header  {'', "archives", "(kB)", "fct", {"#updates", colspan=2}, "filename (node.dev.srv.var)" }
   t2.header {'', "archives", "(kB)", "fct", '', '', "filename (node.dev.srv.var)"}
   local prev
+  local orphans = {}
   for _,f in ipairs (files) do 
     local devnum = f.devnum     -- openLuup device number (if present)
     local tbl = t
     if devnum == '' then
       tbl = t2
+      orphans[#orphans+1] = f.name
     elseif devnum ~= prev then 
       t.row { {xhtml.strong {'[', f.devnum, '] ', f.description}, colspan = 6} }
     end
@@ -1448,17 +1460,30 @@ local function database_tables ()
   end
   
   if t2.length() == 0 then t2.row {'', "--- none ---", ''} end
-  return t, t2
+  return t, t2, orphans
 end
 
 pages.database = function (...) 
-  local t, _ = database_tables(...) 
+  local t, _ = database_tables() 
   return page_wrapper ("Data Historian Disk Database", t) 
 end
 
-pages.orphans = function (...) 
-  local _, t = database_tables(...) 
-  return page_wrapper ("Orphaned Database Files  - from non-existent devices", t) 
+pages.orphans = function (p) 
+  local _, t, orphans = database_tables() 
+  if p and p.TrashOrphans == "yes" then
+    local folder = luup.attr_get "openLuup.Historian.Directory"
+    for _, o in pairs (orphans) do
+      local old, new = folder .. o, "trash/" ..o
+      lfs.link (old, new)
+      os.remove (old)
+    end
+    t = nil   -- they should all have gone
+  end
+  local trash = xhtml.div {class = "w3-panel",
+    xhtml.a {class="w3-button w3-round w3-red", 
+      href = selfref "TrashOrphans=yes", "Move All to Trash", title="move all orphans to trash",
+      onclick = "return confirm('Trash All Orphans: Are you sure?')" } }
+  return page_wrapper ("Orphaned Database Files  - from non-existent devices", trash, t) 
 end
 
 -- file cache
@@ -2555,6 +2580,7 @@ function pages.scenes_table (p, req)
     href = selfref "page=create_scene", "+ Create", title="create new scene"}
   local scn = {}
   local wanted = room_wanted(p)        -- get function to filter by room  
+  local ymdhms = "%y-%m-%d %X"
   for x in sorted_by_id_or_name (p, luup.scenes) do
     local n = x.definition.id
     if wanted(x) and paused_or_not(p, x) then 
@@ -2563,15 +2589,16 @@ function pages.scenes_table (p, req)
         xhtml.img {height=14, width=14, class="w3-display-right", src="icons/pause-solid.svg"} or ''
       local link = xlink ("page=header&scene="..n)
       local current_room = luup.rooms[x.room_num] or "No Room"
+      local timestamp = os.date (ymdhms, x.definition.Timestamp or 0)
       local room_selection = xselect ({reroom=n}, luup.rooms, current_room, {"No Room"})
       scn[#scn+1] = {n,  editable_text({rename=n}, x.description), 
         xhtml.div {class="w3-display-container", style="width:60px;", link, favorite, paused}, 
-        room_selection, delete_link ("scn", n, "scene")}
+        room_selection, timestamp, delete_link ("scn", n, "scene")}
     end
   end
-  local t = create_table_from_data ({"id", "name", '', "room", "delete"}, scn)  
+  local t = create_table_from_data ({"id", "name", '', "room", "created", "delete"}, scn)  
   t.class = "w3-small w3-hoverable"
-  local room_nav = sidebar (p, rooms_selector, device_sort, scene_filter)
+  local room_nav = sidebar (p, rooms_selector, scene_sort, scene_filter)
   local sdiv = xhtml.div {room_nav, xhtml.div {class="w3-rest w3-panel", create, t} }
   return page_wrapper ("Scenes Table", sdiv)
 end
@@ -2696,11 +2723,11 @@ function pages.plugins_table (_, req)
     for folder in (q.folders or ''): gmatch "[^,%s]+" do    -- comma or space separated list
       folders[#folders+1] = folder
     end
-    P.Repository = {source = q.repository, pattern=q.pattern, folders = folders}
+    P.Repository = {type = "GitHub", source = q.repository, pattern=q.pattern, folders = folders}
   end
   ---
   local t = xhtml.table {class = "w3-bordered"}
-  t.header {'', "Name","Version", "Auto", "Files", "Actions", "Update", '', "Unistall"}
+  t.header {'', "Name","Version", "Files", "Actions", "Update", '', "Unistall"}
   for _, p in ipairs (IP2) do
     -- http://apps.mios.com/plugin.php?id=8246
     local src = p.Icon or ''
@@ -2717,7 +2744,7 @@ function pages.plugins_table (_, req)
     files = xhtml.form {action=selfref(), 
       xhtml.input {hidden=1, name="page", value="viewer"},
       xhtml.select (choice)}
-    local auto_update = p.AutoUpdate == '1' and unicode.check_mark or ''
+--    local auto_update = p.AutoUpdate == '1' and unicode.check_mark or ''
     local edit = xhtml.a {href=selfref "page=plugin&plugin="..p.id, title="edit",
       xhtml.img {src="/icons/edit.svg", alt="edit", height=24, width=24} }
     local help = xhtml.a {href=p.Instructions or '', target="_blank", title="help",
@@ -2735,7 +2762,7 @@ function pages.plugins_table (_, req)
         xhtml.input {class="w3-display-right", type="image", src="/icons/retweet.svg", 
           title="update", alt='', height=28, width=28} } }
     local trash_can = p.id == "openLuup" and '' or delete_link ("plugin", p.id)
-    t.row {icon, p.Title, version, auto_update, files, 
+    t.row {icon, p.Title, version, files, 
       xhtml.span{edit, help, info}, update, '', trash_can} 
   end
   local create = xhtml.a {class="w3-button w3-round w3-green", 
