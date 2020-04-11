@@ -5,7 +5,7 @@ module(..., package.seeall)
 
 ABOUT = {
   NAME          = "console.lua",
-  VERSION       = "2020.03.21",
+  VERSION       = "2020.04.03",
   DESCRIPTION   = "console UI for openLuup",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2020 AKBooer",
@@ -79,6 +79,7 @@ ABOUT = {
 -- 2020.03.10  add "Move to Trash" button for orphaned historian files
 -- 2020.03.17  remove autocomplete from action form parameters (passwords, etc...)
 -- 2020.03.19  colour device panel header according to status
+-- 2020.04.02  add App Store
 
 
 --  WSAPI Lua CGI implementation
@@ -181,6 +182,7 @@ server.add_callback_handlers {XMLHttpRequest =
 
 local SID = {
   altui     = "urn:upnp-org:serviceId:altui1",                    -- 'DisplayLine1' and 'DisplayLine2'
+  appstore  = "urn:upnp-org:serviceId:AltAppStore1",
   ha        = "urn:micasaverde-com:serviceId:HaDevice1", 		      -- 'BatteryLevel'
   switch    = "urn:upnp-org:serviceId:SwitchPower1",              -- on/off control
   dimming   = "urn:upnp-org:serviceId:Dimming1",                  -- slider control
@@ -196,7 +198,7 @@ local _log    -- defined from WSAPI environment as wsapi.error:write(...) in run
 local script_name  -- name of this CGI script
   
 -- switch dynamically between different menu styles
-local menu_json = options.Menu ~= '' and options.Menu or "altui_console_menus.json"
+local menu_json = options.Menu ~= '' and options.Menu or "openLuup_menus.json"
 
 -- remove spaces from multi-word names and create index
 local short_name_index = {}       -- long names indexed by short names
@@ -207,7 +209,7 @@ local function short_name(name)
 end
  
 local page_groups = {
---    ["House Mode"]= {"home", "away", "night", "vacation"},
+    ["Apps"]      = {"plugins_table", "app_store", "luup_files"},
     ["Historian"] = {"summary", "cache", "database", "orphans"},
     ["System"]    = {"parameters", "top_level", "all_globals", "states", "sandboxes", "RELOAD"},
     ["Device"]    = {"control", "attributes", "variables", "actions", "events", "globals", "user_data"},
@@ -216,7 +218,7 @@ local page_groups = {
     ["Servers"]   = {"sockets", "http", "smtp", "pop3", "udp", "file_cache"},
     ["Utilities"] = {"backups", "images", "trash"},
     ["Lua Code"]  = {"lua_startup", "lua_shutdown", "lua_test", "lua_test2", "lua_test3"},
-    ["Tables"]    = {"rooms_table", "plugins_table", "devices_table", "scenes_table", "triggers_table"},
+    ["Tables"]    = {"rooms_table", "devices_table", "scenes_table", "triggers_table"},
     ["Logs"]      = {"log", "log.1", "log.2", "log.3", "log.4", "log.5", "startup_log"},
   }
 
@@ -251,9 +253,18 @@ local state =  {[-1] = "No Job", [0] = "Wait", "Run", "Error", "Abort", "Done", 
 local function todate (epoch) return os.date ("%Y-%m-%d %H:%M:%S", epoch) end
 local function todate_ms (epoch) return ("%s.%03d"): format (todate (epoch),  math.floor(1000*(epoch % 1))) end
 
+-- truncate to given length
+-- if maxlength is negative, truncate the middle of the string
 local function truncate (s, maxlength)
   maxlength = maxlength or 22
-  if #s > maxlength then s = s: sub(1, maxlength) .. "..." end
+  if maxlength < 0 then
+    maxlength = math.floor (maxlength / -2)
+    local nc = string.rep('.', maxlength)
+    local pattern = "^(%s)(..-)(%s)$"
+    s = s: gsub(pattern: format(nc,nc), "%1...%3")
+  else
+    if #s > maxlength then s = s: sub(1, maxlength) .. "..." end
+  end
   return s
 end
 
@@ -441,9 +452,10 @@ end
 -- build a vertical menu for the sidebar
 local function filter_menu (items, current_item, request)
   local menu = xhtml.div {class = "w3-margin-bottom  w3-border w3-border-grey"}
-  for i, name in ipairs (items) do
+  for i, item in ipairs (items) do
+    local name = (type(item) == "table") and item[1] or item  -- can be string or HTML element
     local colour = (name == current_item) and "w3-grey" or "w3-light-gray"
-    menu[i] = xhtml.a {class = "w3-bar-item w3-button "..colour, href = selfref (request, name), name }
+    menu[i] = xhtml.a {class = "w3-bar-item w3-button "..colour, href = selfref (request, name), item }
   end
   return xhtml.div {class="w3-bar-block w3-col", style="width:12em;", menu}
 end
@@ -684,7 +696,9 @@ end
 -- action=update_plugin&plugin=openLuup&update=version
 function actions.update_plugin (_, req)
   local q = req.params
-  requests.update_plugin ('', {Plugin=q.plugin, Version=q.version})
+  local v = q.version
+  v = (#v > 0) and v or "master"
+  requests.update_plugin ('', {Plugin=q.plugin, Version=v})
   -- actual update is asynchronous, so return is not useful
 end
 
@@ -693,9 +707,9 @@ function actions.call_action (_, req)
   local q = req.POST    -- it must be a post in order to loop through the params
   if q then
     local act, srv, dev = q.act, q.srv, q.dev
-    q.act, q.srv, q.dev = nil, nil, nil         -- remove these from the request and use the rest of the parameter list
-    -- action returns: error, message, jobNo, arrguments
+    q.act, q.srv, q.dev = nil, nil, nil     -- remove these and use the rest of the parameter list
 --    print ("ACTION", act, srv, dev)
+    -- action returns: error, message, jobNo, arguments
     local e,m,j,a = luup.call_action  (srv, act, q, tonumber (dev))
     local _ = {e,m,j,a}   -- TODO: write status return to message?
   end
@@ -1968,20 +1982,22 @@ end
   body = {middle = ..., topright = ..., bottomright = ...},
   widgets = { w1, w2, ... },
 --]]
-local function generic_panel (x)
+local function generic_panel (x, panel_type)
+  panel_type = panel_type or "tim-panel"
   local div = xhtml.div
-      local widgets = xhtml.span {class="w3-wide"}
-      for i,w in ipairs (x.widgets or empty) do widgets[i] = w end
-      return xhtml.div {class = "w3-small w3-margin-left w3-margin-bottom w3-round w3-border w3-card tim-panel",
-        div {class="top-panel", 
-          truncate (x.top_line.left or ''), 
-          xhtml.span{style="float: right;", x.top_line.right or '' } }, 
-        div {class = "w3-display-container", style = table.concat {"height:", x.height, "px;"},
+  local widgets = xhtml.span {class="w3-wide"}
+  for i,w in ipairs (x.widgets or empty) do widgets[i] = w end
+  local class = "w3-small w3-margin-left w3-margin-bottom w3-round w3-border w3-card " .. panel_type
+  return xhtml.div {class = class,
+    div {class="top-panel", 
+      truncate (x.top_line.left or ''), 
+      xhtml.span{style="float: right;", x.top_line.right or '' } }, 
+    div {class = "w3-display-container", style = table.concat {"height:", x.height, "px;"},
 --          div {class="w3-padding-small w3-margin-left w3-display-left ", x.icon } , 
-          div {class="w3-margin-left w3-display-left ", x.icon } , 
-          div {class="w3-display-middle", x.body.middle},
-          div {class="w3-padding-small w3-display-topright", x.body.topright } ,
-          div {class="w3-padding-small w3-display-bottomright", x.widgets and div(x.widgets) or x.body.bottomright } 
+      div {class="w3-margin-left w3-display-left ", x.icon } , 
+      div {class="w3-display-middle", x.body.middle},
+      div {class="w3-padding-small w3-display-topright", x.body.topright } ,
+      div {class="w3-padding-small w3-display-bottomright", x.widgets and div(x.widgets) or x.body.bottomright } 
           }  } 
 end
 
@@ -2528,7 +2544,7 @@ function pages.devices_table (p, req)
   for d in sorted_by_id_or_name (p, luup.devices) do
     local devNo = d.attributes.id
     if wanted(d) then 
-      local altid = d.id
+      local altid = xhtml.div {title=d.id, truncate (d.id, -22)}    -- drop off the middle of the string
       local trash_can = devNo == 2 and '' or delete_link ("dev", devNo, "device")
       local bookmark = xhtml.span{class="w3-display-right", d.attributes.bookmark == '1' and unicode.black_star or ''}
       local link = xlink ("page=control&device="..devNo)
@@ -2741,13 +2757,8 @@ function pages.plugins_table (_, req)
   end
   ---
   local t = xhtml.table {class = "w3-bordered"}
-  t.header {'', "Name","Version", "Files", "Actions", "Update", '', "Unistall"}
+  t.header {'', "Name","Version", "Files", "GitHub", "Update", '', "Unistall"}
   for _, p in ipairs (IP2) do
-    -- http://apps.mios.com/plugin.php?id=8246
-    local src = p.Icon or ''
-    local mios_plugin = src: match "^plugins/icons/"
-    if mios_plugin then src = "http://apps.mios.com/" .. src end
-    local icon = xhtml.img {src=src, alt="no icon", height=35, width=35} 
     local version = table.concat ({p.VersionMajor or '?', p.VersionMinor}, '.')
     local files = {}
     for _, f in ipairs (p.Files or empty) do files[#files+1] = f.SourceName end
@@ -2758,15 +2769,14 @@ function pages.plugins_table (_, req)
     files = xhtml.form {action=selfref(), 
       xhtml.input {hidden=1, name="page", value="viewer"},
       xhtml.select (choice)}
---    local auto_update = p.AutoUpdate == '1' and unicode.check_mark or ''
-    local edit = xhtml.a {href=selfref "page=plugin&plugin="..p.id, title="edit",
-      xhtml.img {src="/icons/edit.svg", alt="edit", height=24, width=24} }
-    local help = xhtml.a {href=p.Instructions or '', target="_blank", title="help",
-      xhtml.img {src="/icons/question-circle-solid.svg", alt="help", height=24, width=24} }
-    local info = xhtml.a {target="_blank", title="info",
-      href=table.concat {"http://github.com/",p.Repository.source or '',"#readme"}, 
-      xhtml.img {src="/icons/info-circle-solid.svg", alt="info", height=24, width=24} }
-    local update = xhtml.form {
+    
+    local ignore = {AltAppStore = '', VeraBridge = ''}
+    
+    local GitHub_Mark = "https://raw.githubusercontent.com/akbooer/openLuup/development/icons/GitHub-Mark-64px.png"
+    local github = xhtml.a {href="https://github.com/"  .. (p.Repository.source or ''), target="_blank", 
+      xhtml.img {title="go to GitHub repository", src=GitHub_Mark, alt="GitHub", height=32, width=32} }
+    
+    local update = ignore[p.id] or xhtml.form {
       action = selfref(), method="post",
       xhtml.input {hidden=1, name="action", value="update_plugin"},
       xhtml.input {hidden=1, name="plugin", value=p.id},
@@ -2775,14 +2785,254 @@ function pages.plugins_table (_, req)
         xhtml.input {class="w3-hover-border-red", type = "text", autocomplete="off", name="version", value=''},
         xhtml.input {class="w3-display-right", type="image", src="/icons/retweet.svg", 
           title="update", alt='', height=28, width=28} } }
-    local trash_can = p.id == "openLuup" and '' or delete_link ("plugin", p.id)
-    t.row {icon, p.Title, version, files, 
-      xhtml.span{edit, help, info}, update, '', trash_can} 
+    
+    ignore.openLuup = ''
+    local src = p.Icon or ''
+    src  = src: gsub ("^/?plugins/", "http://apps.mios.com/plugins/")  -- http://apps.mios.com/plugin.php?id=...
+    local icon = xhtml.img {src=src, alt="no icon", height=35, width=35}
+    icon = ignore[p.id] and icon or xhtml.a {href=selfref "page=plugin&plugin="..p.id, title="edit", icon}
+    local trash_can = ignore[p.id] or delete_link ("plugin", p.id)
+    t.row {icon, p.Title, version, files, github, update, '', trash_can} 
   end
   local create = xhtml.a {class="w3-button w3-round w3-green", 
     href = selfref "page=plugin", "+ Create", title="create new plugin"}
+--  local appstore = xhtml.a {class="w3-button w3-round w3-amber", 
+--    href = selfref "page=app_store", "App Store", title="go to App Store"}
   return page_wrapper ("Plugins", create, t)
 end
+
+
+--
+-- APP Store
+--
+local APPS = {}
+
+local function load_appstore ()
+  if #APPS > 0 then return end
+  _log "loading app database..."
+--  local fname = "AltAppStore/data/plugins.json"
+--  local f = io.open (fname)
+--  if not f then return end
+--  local j = f:read "*a"
+--  f: close()
+  local _,j = luup.inet.wget "https://raw.githubusercontent.com/akbooer/AltAppStore/data/J_AltAppStore.json"
+
+  local apps, errmsg = json.decode (j)
+  if errmsg then _log (errmsg) end
+  
+  if apps then
+    _log "...done"
+    
+    for _, a in ipairs (apps) do
+      local reps = a.Repositories 
+      if type(reps) == "table" then
+        for _, rep in ipairs (reps) do
+          if rep.type == "GitHub" then
+            a.repository = rep          -- this is the GitHub repository
+            a.Repositories = nil        -- remove the others
+            APPS[#APPS+1] = a
+            APPS[tostring(a.id)] = a    -- add index by ID
+            break
+          end
+        end
+      else
+  --      print ("No Git", a.Title, tostring(reps), a.Title)
+      end
+    end
+  end
+
+  table.sort (APPS, function (a,b) return a.Title < b.Title end)
+end
+
+function pages.app_json (p)
+  local readonly = true
+  local info = json.encode (APPS[p.plugin] or empty)
+  return page_wrapper ("Alt App Store - JSON definition",
+      xhtml.div {code_editor (info, 500, "json", readonly)})
+end
+
+-- info parameter is non-nil in the case of an install
+local function app_panel (app, info)
+  local icon = (app.Icon or ''): gsub ("^/?plugins/", "http://apps.mios.com/plugins/")
+--  print (app.Title, icon)
+  local title = app.Description or ''
+  local repository = app.repository
+  local source = repository.source or ''
+  local onclick = "alert ('%s')"
+  icon = xhtml.img {title=title, onclick = onclick: format(title),
+    src=icon, alt="no icon", height=64, width=64}
+  local GitHub_Mark = "https://raw.githubusercontent.com/akbooer/openLuup/development/icons/GitHub-Mark-64px.png"
+  local github = xhtml.a {href="https://github.com/"  .. source, target="_blank", class="w3-button w3-round",
+    xhtml.img {title="go to GitHub repository", src=GitHub_Mark, alt="GitHub", height=32, width=32} }
+  local jlink = xhtml.a {href=selfref ("page=app_json&plugin=" .. app.id), 
+    class="w3-button w3-round", title="view App Store JSON", "JSON"}
+
+  -- show releases
+  local choice = {style="width:12em;", name="release"} 
+  local versions = repository.versions
+  
+  local vs = {}
+  for _,x in pairs (versions) do vs[#vs+1] = tostring(x.release) end
+  table.sort (vs, function(a,b) return a > b end)
+  for _, release in ipairs (vs) do
+    choice[#choice+1] = xhtml.option {value=release, release} 
+  end
+
+  local panel = generic_panel ({
+    height = 90,
+    top_line = {
+      left = xhtml.span {truncate (app.Title)}, right = xhtml.select (choice)},
+    icon = xhtml.div {class="w3-padding-small w3-display-left ", icon },
+    body = {
+      topright = info,
+      bottomright = xhtml.div {jlink, github, 
+        xhtml.input {class="w3-button w3-round w3-border w3-green ", type="submit", value="Install" } } },
+      }, "app-panel")
+  
+  return xhtml.form {action=selfref(), method="POST",
+    xhtml.input {hidden=1, name="app", value=app.id},
+    panel}
+end
+
+function pages.app_store (p, req)
+  load_appstore()
+  
+  local function install_app (app, release)
+    local meta = {plugin = {} }
+    for n,v in pairs (app) do
+      if type (v) == "table" then -- for some reason the AltAppStore wrapped these to lowercase (@Vosmont??)
+        meta[n: lower()] = v
+      else
+        meta.plugin[n] = v
+      end
+    end
+    
+    -- some more fix-ups (this really is a mess due to committee decisions!)
+    meta.versions = nil
+    meta.versionid = release
+    meta.version = {major = "GitHub", minor = release}
+    
+    -- shallow copy the repository to preserve original for UI version selection
+    local repository = {}
+    for n,v in pairs (meta.repository) do repository[n] = v end
+    repository.versions = {[release] = {release = release}}  -- others are not relevant to the install
+    meta.repository = repository
+    
+    local metadata = json.encode (meta) 
+--    print (metadata)
+    
+    local sid = SID.appstore
+    local act = "update_plugin"
+    local arg = {metadata = metadata}
+    local dev
+    -- find the AltAppStore plugin
+    for devNo, d in pairs (luup.devices) do
+      if (d.device_type == "urn:schemas-upnp-org:device:AltAppStore:1") then
+        dev = devNo
+        break
+      end
+    end
+    
+    -- returns: error (number), error_msg (string), job (number), arguments (table)
+    local _, errmsg, _, a = luup.call_action (sid, act, arg, dev)       -- actual install
+--    print ((json.encode {e,errmsg,j,a}))
+    local result = json.encode (a or {ERROR = errmsg})
+    _log (result)
+    if errmsg then _log (errmsg) end
+    
+    -- NOTE: that the above action executes asynchronously and the function call
+    --       returns immediately, so you CAN'T do a luup.reload() here !!
+    --       (it's done at the end of the <job> part of the called action)
+    return result
+  end
+  
+  local q = req.POST
+  local install = q.app   -- request to install this app
+  local release = q.release
+  
+  -- construct letter groups index
+  local a_z = {"abc", "def", "ghi", "jkl","mno", "pqrs", "tuv", "wxyz"}
+  local All_Apps = "All Apps"
+  local a_z_idx = {}
+  local n_in_group = {}
+  for _, abc in ipairs (a_z) do
+    for letter in abc: gmatch "." do a_z_idx[letter] = abc end
+    n_in_group[abc] = 0
+  end
+
+  local wanted = p.abc_sort
+  local subset = xhtml.div{class = "w3=panel"}
+  for _, app in ipairs(APPS) do
+    local info
+    if app.id == install then info = "INSTALLING..." .. install_app (app, release) end
+    local letter = (app.Title or '') :sub(1,1) :lower()
+    local grp = a_z_idx[letter]
+    n_in_group[grp] = n_in_group[grp] + 1
+    if wanted == All_Apps or wanted == grp then
+      subset[#subset+1] = app_panel(app, info)
+    end
+  end
+  
+  local abc_menu = {xhtml.div{All_Apps, xhtml.span {class="w3-badge w3-right w3-red", #APPS} } }
+  for _, abc in ipairs (a_z) do
+    abc_menu[#abc_menu+1] = 
+      xhtml.div{abc, xhtml.span {class="w3-badge w3-right w3-dark-grey", n_in_group[abc]} } 
+  end
+  
+  local function service_menu () return filter_menu (abc_menu, wanted, "abc_sort=") end
+  local sortmenu = sidebar (p, service_menu)
+  local rdiv = xhtml.div {sortmenu, xhtml.div {class="w3-rest w3-panel", subset } }
+  
+  return page_wrapper ("Alt App Store", rdiv)  
+end
+
+function pages.luup_files (p)
+  local ftype = p.filetype or "All"
+  local function filematch (x) return table.concat {'^', x, "_.+%..+"} end
+  local filetypes = {"All", "Device", "Implementation", "JavaScript", "Lua", "Service", "other"}
+  local filters =   {'.',   'D',      'I',              'J',          'L',   'S',       "[^DIJLS]"}
+  local filepattern = {}
+  for i,n in ipairs(filetypes) do filepattern[n] = filematch (filters[i]) end
+  local function file_menu () return filter_menu (filetypes, ftype, "filetype=") end
+  local typemenu = sidebar (p, file_menu)
+  local filenames = {}
+  for f in loader.dir (filepattern[ftype] or '') do
+    filenames[#filenames+1] = xhtml.a {href=selfref ("page=viewer&file="..f), f}   -- single element
+  end
+  local n = math.floor((#filenames+1) / 2)
+  for i = 1,n do
+    filenames[i] = {filenames[i], filenames[i+n]}     -- two column rows
+  end
+  filenames[n+1] = nil
+  local t = create_table_from_data ({{colspan=2, "filename (click to view)"}}, filenames)
+  local rdiv = xhtml.div {typemenu, xhtml.div {class="w3-rest w3-panel", t } }
+  return page_wrapper ("Luup files", rdiv)  
+end
+
+-----
+
+-- command line
+function pages.command_line (_, req)
+  local output
+  local command = req.POST.command
+  if command then
+    local f = io.popen (command)
+    if f then output = f: read "*a"
+      f: close()
+    end
+  end
+  local h = xhtml
+  local window = h.div {
+    html5_title "Output:", 
+    h.pre {style="height: 500px; border:1px grey; background-color:white; overflow:scroll", output} }
+  local form = h.form {action= selfref (), method="post",
+    h.input {class="w3-button w3-round w3-green w3-margin", value="Submit", type = "submit"},
+    h.input {type = "text", style="width: 80%;", name ="command", 
+      autocomplete="off", placeholder="command line", autofocus=1}}
+  return h.div {class="w3-container", window, form}
+end
+
+-----
 
 function pages.about () 
   local function embedded_links (t)   -- replace embedded http reference with real links
@@ -2941,7 +3191,8 @@ function run (wsapi_env)
   if page_groups[P] then p.page = page_groups[P][1] end     -- replace group name with first page in group
   
   local cookies = {page = "about", previous = "about",      -- cookie defaults
-    device = "2", scene = "1", room = "All Rooms", dev_sort = "Sort by Name", scn_sort = "All Scenes"}
+    device = "2", scene = "1", room = "All Rooms", 
+    abc_sort="abc", dev_sort = "Sort by Name", scn_sort = "All Scenes"}
   for cookie in pairs (cookies) do
     if p[cookie] then 
       res: set_cookie (cookie, p[cookie])                   -- update cookie with URL parameter
@@ -2991,6 +3242,7 @@ function run (wsapi_env)
     .scn-panel {width:240px; float:left; }
     .tim-panel {width:240px; float:left; }
     .trg-panel {width:240px; float:left; }
+    .app-panel {width:320px; float:left; }
     .top-panel {background:LightGrey; border-bottom:1px solid Grey; margin:0; padding:4px;}
     .top-panel-red {background:IndianRed; border-bottom:1px solid Grey; margin:0; padding:4px;}
     .top-panel-blue {background:LightBlue; border-bottom:1px solid Grey; margin:0; padding:4px;}
