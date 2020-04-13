@@ -56,6 +56,11 @@ and partially modelled on the InstalledPlugins2 structure in Vera user_data.
 -- 2020.03.29   incorporate modified version of @reneboer's GitHub access fix
 --              see: https://github.com/akbooer/openLuup/pull/21
 
+-- 2020.03.03   add log output of request metadata (for diagnostics)
+-- 2020.03.28   fix recent release error handling
+-- 2020.03.29   incorporate modified version of @reneboer's GitHub access fix
+--              see: https://github.com/akbooer/openLuup/pull/21
+
 
 local https     = require "ssl.https"
 local lfs       = require "lfs"

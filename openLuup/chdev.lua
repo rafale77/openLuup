@@ -118,6 +118,8 @@ local function varlist_to_table (statevariables)
   return vars
 end
 
+
+--
 -- function: create (x)
 -- parameters: see below
 --
@@ -174,8 +176,8 @@ local function create (x)
 
   local device_type = d.device_type or ''
   local job_priority = {
-    openLuup = 1, 
-    ["urn:schemas-upnp-org:device:altui:1"] = 3, 
+    openLuup = 1,
+    ["urn:schemas-upnp-org:device:altui:1"] = 3,
     VeraBridge = 5,
     ZWay = 5}         -- 2020.03.07
   local cat_num = tonumber (x.category_num or d.category_num or loader.cat_by_dev[device_type])   -- 2019.06.02
@@ -670,6 +672,7 @@ return {
 
   create = create,
   create_device = create_device,
+
   -- openLuup Bridge utilities for child numbering
   bridge = bridge_utilities,
 

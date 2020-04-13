@@ -1306,6 +1306,7 @@ local manifest = {
     ["D_VeraBridge.json"] = D_VeraBridge_json,
     ["I_VeraBridge.xml"]  = I_VeraBridge_impl,
     ["S_VeraBridge.xml"]  = S_VeraBridge_svc,
+
     ["D_ZWay.xml"]  = D_ZWay_xml,
     ["D_ZWay.json"] = D_ZWay_json,
     ["I_ZWay.xml"]  = I_ZWay_xml,

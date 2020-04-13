@@ -953,6 +953,7 @@ function init (lul_device)
   devNo = lul_device
   ip = luup.attr_get ("ip", devNo)
   luup.log (ip)
+
   -------
   -- 2020.02.12 use existing Bridge offset, if defined.
   -- this way, it doesn't matter if other bridges get deleted, we keep the same value
@@ -1011,6 +1012,7 @@ function init (lul_device)
     setVar ("PK_AccessPoint", PK_AccessPoint)         -- 2018.06.04   Expose PK_AccessPoint as device variable
     setVar ("Remote_ID", PK_AccessPoint, SID.bridge)  -- 2020.02.12   duplicate above as unique remote ID
     setVar ("LoadTime", LoadTime or 0)                -- 2019.03.18
+
     setVar ("DisplayLine1", Ndev.." devices, " .. Nscn .. " scenes", SID.altui)
     setVar ("DisplayLine2", ip, SID.altui)        -- 2018.03.02
 
