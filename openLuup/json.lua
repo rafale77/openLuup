@@ -1,6 +1,6 @@
 local ABOUT = {
   NAME          = "openLuup.json",
-  VERSION       = "2020.04.13  --- EXPERIMENTAL ---",
+  VERSION       = "2020.04.14",
   DESCRIPTION   = "JSON encode/decode with unicode escapes to UTF-8 encoding and pretty-printing",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2020 AKBooer",
@@ -34,6 +34,8 @@ local ABOUT = {
 -- 2018.06.26   extend default max_array_length to 3000
 
 -- 2020.04.12   streamline encode() and decode(), use cjson.decode() if installed (10x faster!)
+-- 2020.04.14   provide access to both Lua and C implementations (if installed)
+
 
   local is_cj, cjson = pcall (require, "cjson")
 
@@ -53,9 +55,7 @@ local ABOUT = {
     local function p(x) buffer[#buffer+1] = x end   -- add item
     local function q(x) buffer[#buffer]   = x end   -- overwrite last item
 
-    local function json_error (text)    -- raise error
-      error ("JSON encode error : " .. text , 0)
-    end
+    local function json_error (text)  error ("JSON encode error : " .. text , 0) end
 
     local value               -- forward function reference
     local depth = 1           -- for pretty printing
@@ -86,12 +86,12 @@ local ABOUT = {
       return replace [old] or ("\\u%04x"): format (old: byte () )
     end
 
-    local str_hit = {}
-    local str_cache  = {}                         -- cache storage for encoded strings
     local ctrl_chars = "%z\001-\031"              -- whole range of control characters
 --    local old = '[' .. '"' .. '/' .. '\\' .. ctrl_chars .. ']'
     local old = table.concat {'[', '"', '\\', ctrl_chars, ']'}      -- 2016.06.19
 
+--    local str_hit = {}                            -- log of cache hits
+    local str_cache = {}                          -- cache storage for encoded strings
     local function string (x)
 --      str_hit[x] = (str_hit[x] or 0) + 1          -- count cache hits
       str_cache[x] = str_cache[x] or                -- use cached result if available
@@ -202,13 +202,15 @@ local ABOUT = {
     local idx = 1       -- starting character for parser
 
     -- note that inline 'if ... then ... end' calls to this are significantly faster than an 'assert' function call
-    local function json_error (msg)
+    local function json_message (msg)
       local _, lineNo = json: sub(1, idx): gsub ('\n','\n')
-      local message = "JSON decode error @[%d of %d, line: %d] %s\nat: '%s   <<<HERE>>>   %s'"
       local before = json: sub (math.max (1,idx-20), math.max(idx-1,1))
       local after = json:sub (idx, idx+20)   -- : gsub ("%c", ' ')
-      error (message: format (idx, #json, lineNo+1, msg, before, after), 0)
+      local message = "JSON decode error @[%d of %d, line: %d] %s\n   '%s   <<<HERE>>>   %s'"
+      return message: format (idx, #json, lineNo+1, msg, before, after)
     end
+
+    local function json_error (msg) error (json_message(msg), 0) end
 
     local function find (pattern)
       local _,b, c, d = json: find (pattern, idx)
@@ -216,6 +218,16 @@ local ABOUT = {
         idx = b+1
       end
       return c, d
+    end
+
+    local function literal ()
+      local c = find (literal_string)
+      return valid_literal[c]
+    end
+
+    local function number ()
+      local c = find (numeric_string)
+      return tonumber (c)
     end
 
     local function literal ()
@@ -319,12 +331,12 @@ local ABOUT = {
     end
 
     local function parse_json ()
-      if type (json) ~= "string" then json = type(json); error ("JSON input parameter is not a string", 2) end
+      if type (json) ~= "string" then json = type(json); error ("JSON input parameter is not a string", 0) end
       local warning
       local result = value ()        -- start at first character
       find (trailing_spaces)
       if idx-1 ~= #json  then
-        warning = "not all of json string parsed"
+        warning = json_message "unexpected data after valid JSON string"
       end
       return warning, result
     end
@@ -337,14 +349,17 @@ local ABOUT = {
   end  -- decode ()
 
   local function decode_wrapper (json)
+    local ok, msg, try1, try2
     if is_cj then                          -- 2020.04.12  use cjson module, if available
-      local ok, lua = pcall (cjson.decode, json)
-      if ok then return lua end
+      ok, try1 = pcall (cjson.decode, json)
+      if ok then return try1 end
     end
-    return decode (json)
+    try2, msg = decode (json)
+    return try2, msg or try1      -- use our message or the one from cjson error
   end
 
 return {
+
     ABOUT = ABOUT,
 
     decode  = decode_wrapper,
@@ -352,4 +367,9 @@ return {
     default = default,
     encode  = encode,
     null    = json_null,
+
+    Lua = {encode = encode, decode = decode},   -- direct access to Lua implementation
+
+    C = is_cj and cjson or nil,                 -- direct access to C implementation
+
   }

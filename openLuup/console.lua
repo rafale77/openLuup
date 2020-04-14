@@ -3009,8 +3009,6 @@ function pages.luup_files (p)
   return page_wrapper ("Luup files", rdiv)
 end
 
------
-
 -- command line
 function pages.command_line (_, req)
   local output
