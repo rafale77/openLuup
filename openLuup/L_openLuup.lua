@@ -139,17 +139,17 @@ local function calc_stats ()
   local AppMemoryUsed =  math.floor(collectgarbage "count")   -- openLuup's memory usage in kB
   local now, cpu = timers.timenow(), timers.cpu_clock()
   local uptime = now - timers.loadtime + 1
-  
+
   local cpu_load = round ((cpu - cpu_prev) / INTERVAL * 100, 0.1)
   local memory_mb  = round (AppMemoryUsed / 1000, 0.1)
   local uptime_days    = round (uptime / 24 / 60 / 60, 0.01)
   cpu_prev= cpu
-  
+
   -- store the results as module globals
   _G["Memory Used (Mb)"]  = memory_mb
   _G["Uptime (days)"]     = uptime_days
   _G["CPU Load (%)"]      = cpu_load
-  
+
   -- store the results as device variables
   set ("Memory_Mb",   memory_mb)
   set ("CpuLoad",     cpu_load)
@@ -158,13 +158,13 @@ local function calc_stats ()
   local line1 = ("%0.0fMb, %s%%cpu, %0.1fdays"): format (memory_mb, cpu_load, uptime_days)
   display (line1)
   luup.log (line1)
- 
+
   -- store the results as top-level system attributes
   local set_attr = luup.attr_get "openLuup.Status"
   set_attr ["Memory"]  = memory_mb .. " Mbyte"
   set_attr ["CpuLoad"] = cpu_load .. '%'
   set_attr ["Uptime"]  = uptime_days .. " days"
-  
+
   -- system memory info
   local y = mem_stats()
   local memfree, memavail, memtotal = y.MemFree, y.MemAvail, y.MemTotal
@@ -172,11 +172,11 @@ local function calc_stats ()
     local mf = round (memfree  / 1000, 0.1)
     local ma = round (memavail / 1000, 0.1)
     local mt = round (memtotal / 1000, 0.1)
-    
+
     set ("MemFree_Mb",  mf)
     set ("MemAvail_Mb", ma)
     set ("MemTotal_Mb", mt)
-    
+
     set_attr["MemFree"]  = mf .. " Mbyte"
     set_attr["MemAvail"] = ma .. " Mbyte"
     set_attr["MemTotal"] = mt .. " Mbyte"
@@ -191,19 +191,19 @@ end
 -- returns action tag object with possible run/job/incoming/timeout functions
 --
 local function generic_action (serviceId, name)
-  
+
 --  local function run (lul_device, lul_settings)
 --  local function job (lul_device, lul_settings, lul_job)
   local noop = {
     run = function () _log ("Generic action <run>: ", serviceId, ", ", name) return true end,
     job = function () _log ("Generic action <job>: ", serviceId, ", ", name) return  4,0 end,
   }
-  
+
   local dispatch = {
 --      plugin_configuration  = {run = plugin_configuration},
       -- add specifics here for other actions
     }
-    
+
   return dispatch[name] or noop
 end
 
@@ -215,27 +215,27 @@ end
 function openLuup_storage_provider (_, p)
   local influx = "%s value=%s"
   _debug (json.encode {Influx_DSP = {p}})
-  if InfluxSocket and p.measurement and p.new then 
+  if InfluxSocket and p.measurement and p.new then
     InfluxSocket: send (influx: format (p.measurement, p.new))
   end
 end
 
 local function register_Data_Storage_Provider ()
-  
+
   local AltUI
   for devNo, d in pairs (luup.devices) do
-    if d.device_type == "urn:schemas-upnp-org:device:altui:1" 
+    if d.device_type == "urn:schemas-upnp-org:device:altui:1"
     and d.device_num_parent == 0 then   -- look for it on the LOCAL machine (might be bridged to another!)
       AltUI = devNo
       break
     end
   end
-  
+
   if not AltUI then return end
-  
+
   luup.log ("registering with AltUI [" .. AltUI .. "] as Data Storage Provider")
   luup.register_handler ("openLuup_storage_provider", "openLuup_DSP")
-  
+
   local newJsonParameters = {
     {
         default = "unknown",
@@ -267,7 +267,7 @@ end
 -- calls 'process' function for every matching file
 -- policies is a table of the form:
 --[[
-    { 
+    {
       [folderName1] = {types = "jpg gif tmp", days=1, weeks=1, months=1, years=1, maxfiles=42},
       [folderName2] = {types = "*", weeks=3, maxfiles=42},
       [...]
@@ -322,15 +322,15 @@ local function implement_retention_policies (policies, process)
     local a = lfs.attributes (dir)                -- check that path exists
     local is_dir = a and a.mode == "directory"
     local up_dir = dir: match "%.%."              -- remove any attempt to move up directory tree
-    
+
     if is_dir and not up_dir then
       local path = dir:gsub ("[^/]$", '%1/')      -- make sure it ends with a '/'
       local types = filetypes (policy)
       local files = get_candidates (path, types)
-      local max_age = duration (policy) 
+      local max_age = duration (policy)
       local max_files = policy.maxfiles
       _log (purge: format (path, policy.types or '', max_age or "unlimited", max_files or "unlimited"))
-      
+
       -- apply max file policy
       if max_files then
         for i = #files, policy.maxfiles+1, -1 do
@@ -340,17 +340,17 @@ local function implement_retention_policies (policies, process)
           files[i] = nil
         end
       end
-      
+
       -- apply max age policy
       if max_age then
         for _, file in ipairs (files) do
           if file.age > max_age then
             _log (("select %0.0f day old %s"): format(file.age, file.name))
             process (file.name)
-          end      
-        end      
+          end
+        end
       end
-    
+
     end
   end
 end
@@ -362,30 +362,30 @@ end
 
 -- 2018.03.21  SendToTrash
 --
---  Parameters: 
+--  Parameters:
 --    Folder    (string) path of folder below openLuup current directory
 --    MaxDays   (number) maximum age of files (days) to retain
 --    MaxFiles  (number) maximum number of files to retain
 --    FileTypes (string) one or more file extensions to apply, or * for anything
 --
 function SendToTrash (p)
-  
+
   local function trash (file)
     local filename = file: match "[/\\]*([^/\\]+)$"    -- ignore leading path to leave just the filename
     os.rename (file, "trash/" .. filename)
   end
-  
+
   -- try to protect ourself from any damage!
   local locked = {"openLuup", "cgi", "cgi-bin", "cmh", "files", "history", "icons", "whisper", "www"}
   local prohibited = {}
   for _, dir in ipairs(locked) do prohibited[dir] = dir end   -- turn list into indexed table
-  
+
   local folder = (p.Folder or ''): match "^[%./\\]*(.-)[/\\]*$" -- just pull out the relevant path
   if prohibited[folder] then
     luup.log ("cannot select files in protected folder " .. tostring(folder))
     return
   end
-  
+
   if folder then
     luup.log "applying file retention policy..."
     local days = tonumber (p.MaxDays)               -- 2018.04.15
@@ -466,7 +466,7 @@ end
 function openLuup_synchronise ()
   local days, data                      -- unused parameters
   local timer_type = 1                  -- interval timer
-  local recurring = true                -- reschedule automatically, definitely not a Vera luup option! ... 
+  local recurring = true                -- reschedule automatically, definitely not a Vera luup option! ...
                           -- ...it ensures that rescheduling is always on time and does not 'slip' between calls.
   luup.log "synchronising to on-the-minute"
   luup.call_timer ("openLuup_ticker", timer_type, MINUTES, days, data, recurring)
@@ -489,18 +489,18 @@ function openLuup_images (email, data)
   if type (message.body) == "table" then      -- must be multipart message
     local n = 0
     for i, part in ipairs (message.body) do
-      
+
       local ContentType = part.header["content-type"] or "text/plain"
-      local ctype = ContentType: match "^%w+/%w+" 
+      local ctype = ContentType: match "^%w+/%w+"
       local cname = ContentType: match 'name%s*=%s*"?([^/\\][^"]+)"?'   -- avoid absolute paths
       if cname and cname: match "%.%." then cname = nil end           -- avoid any attempt to move up folder tree
-      cname = cname or os.date "Snap_%Y%m%d-%H%M%S-" .. i .. ".jpg"   -- make up a name if necessary      
-      log ("Content-Type:", ContentType) 
-      
+      cname = cname or os.date "Snap_%Y%m%d-%H%M%S-" .. i .. ".jpg"   -- make up a name if necessary
+      log ("Content-Type:", ContentType)
+
       ctype = ctype or ''                     -- 2018.08.30
       if (ctype: match "image")               -- 2018.03.28  add application type
       or (ctype: match "application") then    -- write out image files  (thanks @jswim788)
-        local f, err = io.open ("images/" .. cname, 'wb') 
+        local f, err = io.open ("images/" .. cname, 'wb')
         if f then
           n = n + 1
           f: write (part.body)
@@ -510,7 +510,7 @@ function openLuup_images (email, data)
         end
       end
     end
-    if n > 0 then 
+    if n > 0 then
       local saved = "%s: saved %d image files"
       _log (saved: format(email, n))
     else
@@ -543,15 +543,15 @@ end
 function openLuup_events (mailbox, data)
   local message = data: decode ()             -- decode MIME message
   local headers = message.header
-  
+
   local newHeaders = {["content-type"] = "text/plain"}    -- vanilla message
-  for a,b in pairs (headers) do 
+  for a,b in pairs (headers) do
     if type(a) == "string" and not a: match "^content" then
       newHeaders[a] = b
     end
   end
   newHeaders.subject = newHeaders.subject or "---no subject---"
-  
+
   local newData = {}
   for a in smtp.message {headers = newHeaders, body = ''} do    -- no body text
       newData[#newData+1] = a: gsub ('\r','')                   -- remove redundant <CR>
@@ -577,7 +577,7 @@ function init (devNo)
     info.Version = version      -- put it into openLuup table too.
     info.Vnumber = Vnumber      -- ditto --
   end
-  
+
   do -- synchronised heartbeat
     local later = timers.timenow() + INTERVAL         -- some minutes in the future
     later = INTERVAL - later % INTERVAL               -- adjust to on-the-hour (actually, two-minutes)
@@ -605,27 +605,27 @@ function init (devNo)
     local upnp_file = "D_AltAppStore.xml"
     local upnp_impl = "I_AltAppStore.xml"
     luup.chdev.append (devNo, ptr, altid, description, device_type, upnp_file, upnp_impl)
-    luup.chdev.sync (devNo, ptr)  
-  end  
-  
-  do -- InfluxDB as Data Storage Provider 
+    luup.chdev.sync (devNo, ptr)
+  end
+
+  do -- InfluxDB as Data Storage Provider
     local dsp = "InfluxDB Data Storage Provider: "
     local db = luup.attr_get "openLuup.DataStorageProvider.Influx"
     if db then
       local err
       register_Data_Storage_Provider ()   -- 2018.03.01
       InfluxSocket, err = ioutil.udp.open (db)
-      if InfluxSocket then 
+      if InfluxSocket then
         _log (dsp .. tostring(InfluxSocket))
       else
-        _log (dsp .. (err or '')) 
+        _log (dsp .. (err or ''))
       end
     end
   end
-  
+
   set ("StartTime", luup.attr_get "openLuup.Status.StartTime")        -- 2018.05.02
   calc_stats ()
-  
+
   return true, msg, ABOUT.NAME
 end
 
