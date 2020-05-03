@@ -5,7 +5,7 @@ module(..., package.seeall)
 
 ABOUT = {
   NAME          = "console.lua",
-  VERSION       = "2020.04.04",
+  VERSION       = "2020.05.03b",
   DESCRIPTION   = "console UI for openLuup",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2020 AKBooer",
@@ -121,7 +121,7 @@ end
 local options = luup.attr_get "openLuup.Console" or {}   -- get configuration parameters
 --[[
       Menu ="",           -- add menu JSON definition file here
-      Ace_URL = "https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.3/ace.js",
+      Ace_URL = "https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.11/ace.js",
       EditorTheme = "eclipse",
 ]]
 --
@@ -2806,15 +2806,13 @@ end
 -- APP Store
 --
 local APPS = {}
+local APP_loadtime = 0
+local database_creation_time = 0
 
 local function load_appstore ()
-  if #APPS > 0 then return end
+  local timenow = os.time()
+  if #APPS > 0 and timenow < APP_loadtime + 24*60*60 then return end    -- update if older than 24 hours
   _log "loading app database..."
---  local fname = "AltAppStore/data/plugins.json"
---  local f = io.open (fname)
---  if not f then return end
---  local j = f:read "*a"
---  f: close()
   local _,j = luup.inet.wget "https://raw.githubusercontent.com/akbooer/AltAppStore/data/J_AltAppStore.json"
 
   local apps, errmsg = json.decode (j)
@@ -2822,6 +2820,8 @@ local function load_appstore ()
 
   if apps then
     _log "...done"
+    APPS = {}
+    APP_loadtime = timenow
 
     for _, a in ipairs (apps) do
       local reps = a.Repositories
@@ -2842,6 +2842,7 @@ local function load_appstore ()
   end
 
   table.sort (APPS, function (a,b) return a.Title < b.Title end)
+  database_creation_time = (APPS[1] or {}) .loadtime or 0
 end
 
 function pages.app_json (p)
@@ -2983,14 +2984,18 @@ function pages.app_store (p, req)
   local sortmenu = sidebar (p, service_menu)
   local rdiv = xhtml.div {sortmenu, xhtml.div {class="w3-rest w3-panel", subset } }
 
-  return page_wrapper ("Alt App Store", rdiv)
+  return page_wrapper ("Alt App Store (as of " .. todate(database_creation_time) .. ')', rdiv)
 end
 
 function pages.luup_files (p)
   local ftype = p.filetype or "All"
-  local function filematch (x) return table.concat {'^', x, "_.+%..+"} end
-  local filetypes = {"All", "Device", "Implementation", "JavaScript", "Lua", "Service", "other"}
-  local filters =   {'.',   'D',      'I',              'J',          'L',   'S',       "[^DIJLS]"}
+  local function filematch (x)
+    if #x == 1 then x = table.concat {'^', x, "_.+%..+"} end
+    return x
+  end
+  local filetypes = {"All", "Device (xml/json)", "Device (xml)", "Device (json)",
+    "Implementation", "JavaScript", "Lua", "Service", "other"}
+  local filters =   {'.', 'D', "^D_.-%.xml$", "^D_.-%.json$", 'I', 'J', 'L', 'S', "^[^DIJLS]_"}
   local filepattern = {}
   for i,n in ipairs(filetypes) do filepattern[n] = filematch (filters[i]) end
   local function file_menu () return filter_menu (filetypes, ftype, "filetype=") end
