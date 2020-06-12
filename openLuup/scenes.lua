@@ -73,7 +73,7 @@ local ABOUT = {
 
 
 local logs      = require "openLuup.logs"
-local json      = require "openLuup.json"
+local json      = require "rapidjson"
 local timers    = require "openLuup.timers"
 local loader    = require "openLuup.loader"       -- for shared_environment and compile_lua()
 local scheduler = require "openLuup.scheduler"    -- simply for adding notes to the timer jobs
@@ -200,7 +200,6 @@ local function get_actioned_devices(self)      -- 2019.05.15
   end
   return devs
 end
-
 
 --]]
 
@@ -386,7 +385,6 @@ local function scene_runner (self, t, next_time, params)              -- called 
     if delay > max_delay then max_delay = delay end
     timers.call_delay (group_runner, delay, group.actions, label .. "group delay")
   end
-
   -- finish up
   local function scene_finisher (started)                               -- called at end of scene
     if scene.last_run == started then

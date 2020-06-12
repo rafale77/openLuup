@@ -40,14 +40,14 @@ local ABOUT = {
 -- 2019.05.12   make RunScene action use job, rather than run tag.
 
 -- 2020.01.28   add parameter table to scene(run) call (for detection of AltUI requests)
--- 2020.03.08   add new scene creation date in ModifyUserData 
+-- 2020.03.08   add new scene creation date in ModifyUserData
 
 
 local requests    = require "openLuup.requests"
 local scenes      = require "openLuup.scenes"
 local userdata    = require "openLuup.userdata"     -- for HouseMode
 local loader      = require "openLuup.loader"       -- for compile_lua
-local json        = require "openLuup.json"
+local json        = require "rapidjson"
 local logs        = require "openLuup.logs"
 local devutil     = require "openLuup.devices"
 
@@ -61,7 +61,7 @@ logs.banner (ABOUT)   -- for version control
 
 
 --local Device_0 = chdev.create {
---    devNo = 0, 
+--    devNo = 0,
 --    device_type = "urn:schemas-micasaverde-com:device:HomeAutomationGateway:1"
 --}
 
@@ -105,57 +105,57 @@ Device_0: variable_set (SID, "DeviceNum", '')
 Create a device using the given parameters.
 
 deviceType is the UPnP device type.
-internalID is the specific ID (also known as altid) of the device; 
+internalID is the specific ID (also known as altid) of the device;
 Description is the device name, which is shown to the user on the dashboard.
 UpnpDevFilename is the UPnP device description file name.
 UpnpImplFilename is the implementation file to use.
 IpAddress is the IP address and port of the device.
 DeviceNumParent is the device number of the parent device.
 RoomNum is the number of the room the device will be in.
-PluginNum tells the device which plugin to use. 
+PluginNum tells the device which plugin to use.
 The plugin will be installed automatically if it's not already installed.
-StateVariables is a string containing the variables you want set when the device is created. 
+StateVariables is a string containing the variables you want set when the device is created.
 You can specify multiple variables by separating them with a line feed ('\n'), and use ',
-' and '=' to separate service, variable and value, like this: 
+' and '=' to separate service, variable and value, like this:
   service,variable=value\nservice,variable=value\n...
-If Reload is 1, the Luup engine will be restarted after the device is created. 
+If Reload is 1, the Luup engine will be restarted after the device is created.
 
 --]]
 
 local function CreateDevice (_, p)
--- luup.create_device (device_type, internal_id, description, upnp_file, upnp_impl, 
+-- luup.create_device (device_type, internal_id, description, upnp_file, upnp_impl,
 --                  ip, mac, hidden, invisible, parent, room, pluginnum, statevariables...)
   local hidden, invisible, pluginnum
   local devNo = luup.create_device (
-    p.deviceType or '', p.internalId or '', p.Description, 
+    p.deviceType or '', p.internalId or '', p.Description,
     p.UpnpDevFilename, p.UpnpImplFilename,
-    p.IpAddress, p.MacAddress, 
-    hidden, invisible, 
+    p.IpAddress, p.MacAddress,
+    hidden, invisible,
     p.DeviceNumParent, tonumber(p.RoomNum),
     pluginnum, p.StateVariables)
-    
+
     Device_0:variable_set (SID, "DeviceNum", devNo)    -- for return variable
-  return true  
+  return true
 end
 
--- action=CreatePluginDevice&PluginNum=int 	
+-- action=CreatePluginDevice&PluginNum=int
 -- Creates a device for plugin #PluginNum.
--- StateVariables 	string 
-local function CreatePluginDevice (...) 
+-- StateVariables 	string
+local function CreatePluginDevice (...)
   requests.update_plugin (...)
   return true
 end
 
--- action=CreatePlugin&PluginNum=int 	
--- Create a plugin with the PluginNum number and Version version. 
--- StateVariables are the variables that will be set when the device is created. 
--- For more information look at the description of the CreateDevice action above. 
+-- action=CreatePlugin&PluginNum=int
+-- Create a plugin with the PluginNum number and Version version.
+-- StateVariables are the variables that will be set when the device is created.
+-- For more information look at the description of the CreateDevice action above.
 local function CreatePlugin (...)
   requests.update_plugin (...)
   return true
 end
 
--- DeletePlugin  PluginNum  int  Uninstall the given plugin. 
+-- DeletePlugin  PluginNum  int  Uninstall the given plugin.
 -- action=DeletePlugin&PluginNum=...
 local function DeletePlugin (...)
   requests.delete_plugin (...)
@@ -171,41 +171,41 @@ end
 --
 -- build the action list
 
-Device_0.services[SID].actions = 
+Device_0.services[SID].actions =
   {
-    
+
     CreateDevice = {  -- run creates device, returning job number, reload (if any) deferred to job
       run = CreateDevice,
-      job = function (_, p) 
+      job = function (_, p)
         if p.Reload == '1' then luup.reload () end
       end,
       name = "CreateDevice",                -- required for return arguments
       returns = {DeviceNum = "DeviceNum"},  -- ditto
       serviceId = SID,
     },
-    
+
     CreatePluginDevice  = {run = CreatePluginDevice},
     CreatePlugin        = {run = CreatePlugin},
     DeleteDevice        = {run = DeleteDevice},
-    
+
     DeletePlugin = {      -- <run> / <job> structure allows return message to UI before reload
       run = DeletePlugin,
       job = function () luup.reload () end,
     },
-    
-    -- LogIpRequest 	IpAddress 	UDN 	MacAddress 	UDN 
+
+    -- LogIpRequest 	IpAddress 	UDN 	MacAddress 	UDN
     LogIpRequest = {
-      
+
     },
-    
+
     -- action=ModifyUserData&inUserData=...&DataFormat=json&Reload=...
     -- Make changes to the UserData.
     --   inUserData is the new UserData object which will be added or replace a UserData object.
     --   DataFormat must be json.
-    --   If Reload is 1 the LuaUPnP engine will reload after the UserData is modified. 
+    --   If Reload is 1 the LuaUPnP engine will reload after the UserData is modified.
     --   For more information read http://wiki.micasaverde.com/index.php/ModifyUserData
     -- and http://forum.micasaverde.com/index.php/topic,55598.msg343277.html#msg343277
-    
+
     --[[
           UserData JSON structure contains:
           {
@@ -221,28 +221,28 @@ Device_0.services[SID].actions =
     --]]
     ModifyUserData = {
       extra_returns = {UserData = "{}"},     -- 2018.01.28  action return info
-      job = function (_, p) 
+      job = function (_, p)
         if p.Reload == '1' then luup.reload () end
       end,
       run = function (_,m)
         local response
-        
+
         if m.DataFormat == "json" and m.inUserData then
           local j,msg = json.decode (m.inUserData)
-          if not j then 
-            response = msg 
+          if not j then
+            response = msg
             _log (msg)
           else
-            
+
             -- Startup
-            
+
             if j.StartupCode then
               luup.attr_set ("StartupCode", j.StartupCode)
               _log "modified StartupCode"
             end
-            
+
             -- Scenes
-            
+
             if j.scenes then                                -- 2016.06.05
               for _, scene in pairs (j.scenes) do
                 local id = tonumber (scene.id)
@@ -260,20 +260,20 @@ Device_0.services[SID].actions =
                 end
               end
             end
-            
+
             -- Devices
-            
+
             if j.devices then
               for dev_name, info in pairs (j.devices) do
                 local devnum = tonumber (dev_name: match "_(%d+)$")   -- deal with this ridiculous naming convention
                 local dev = luup.devices[devnum]
                 if dev then
                   if info.states then
-                    
+
                     _log ("modifying states in device #" .. devnum)
-                    
+
                     dev:delete_vars()      -- remove existing variables
-                    
+
                     local newmsg = "new state[%s] %s.%s=%s"
                     local errmsg = "error: state index/id mismatch: %s/%s"
                     for i, v in pairs (info.states) do
@@ -288,9 +288,9 @@ Device_0.services[SID].actions =
                 end
               end
             end
-            
+
             -- InstalledPlugins2
-           
+
             if j.InstalledPlugins2 then
               for plug_id, info in pairs (j.InstalledPlugins2) do
                 _log ("InstalledPlugins2 ******* NOT IMPLEMENTED *******" .. plug_id)
@@ -298,40 +298,40 @@ Device_0.services[SID].actions =
                 _log "**********************"
               end
             end
-            
+
             -- also sections, rooms, users...
-            
+
           end
-          
+
         else    -- not yet implemented
           _log (m.inUserData)
         end
         return true
       end
     },
-    
-    -- Reload the LuaUPnP engine. 
+
+    -- Reload the LuaUPnP engine.
     Reload = {
       run = function ()
         luup.reload ()
         return true
       end
     },
-     
+
     -- action=RunLua&Code=...
     -- error message should be plain text "ERROR: Code failed"
-    RunLua = { 
-      run = function (_, p) 
+    RunLua = {
+      run = function (_, p)
         local ok, status = loader.compile_lua (
           p.Code or "return 'ERROR: code failed'",
           "RunLua",
           scenes.environment)   -- runs in scene/startup context
-        return ok and (status ~= false)   
-      end, 
-    },   
-    
+        return ok and (status ~= false)
+      end,
+    },
+
     -- action=RunScene&SceneNum=...
-    -- Run the given scene. 
+    -- Run the given scene.
     RunScene = {
 --      run = function (_, p)
       job = function (_, p)     -- 2019.05.12
@@ -344,10 +344,10 @@ Device_0.services[SID].actions =
 --        return true
       end
     },
-    
+
     -- action=SetHouseMode&Mode=...
-    SetHouseMode = { 
-      run = function (_, p) 
+    SetHouseMode = {
+      run = function (_, p)
         local valid = {
             ["1"] = "1",    -- "home"
             ["2"] = "2",    -- "away"
@@ -363,21 +363,19 @@ Device_0.services[SID].actions =
           luup.call_delay ("setHouseMode_delayed", delay, new)
         end
         return true
-      end, 
+      end,
     },
 
-    --[[ 
+    --[[
     SetVariable - Create or change the value of a variable.
     DeviceNum can be an UDN or a number.
     Service is the service ID of the variable.
     Variable is the variable name.
-    Value is the new variable value. 
+    Value is the new variable value.
     --]]
     SetVariable = {
-      
+
     }
-  } 
+  }
 
 return Device_0
-
-

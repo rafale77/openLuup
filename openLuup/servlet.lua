@@ -35,11 +35,11 @@ Requests are of three basic types:
 
 The add_callback_handlers () function registers a list of new request callback handlers.
 
-The execute() function essentially converts a given luup-style callback handler, which simply returns response and possibly mime-type, into both a function with WSAPI-style returns of status, headers, and iterator function, and also a task which may be executed by the scheduler.  These are essentially, servlets.  
+The execute() function essentially converts a given luup-style callback handler, which simply returns response and possibly mime-type, into both a function with WSAPI-style returns of status, headers, and iterator function, and also a task which may be executed by the scheduler.  These are essentially, servlets.
 
 If a respond() function is given to the execute() call, then the servlet is scheduled.  CGI and file
 requests are currently implemented as <run> tags, so do not appear as scheduler jobs (thus improving response times.)
-The data_request one is a more complex task with, run as an asynchronous job, to handle the 
+The data_request one is a more complex task with, run as an asynchronous job, to handle the
 MinimumDelay, Timeout, and DataVersion parameters which all affect timing of the response.
 
 The WSAPI-style functions are used by the servlet tasks, but also called directly by the wget() client call which processes their reponses directly.
@@ -70,7 +70,7 @@ The WSAPI-style functions are used by the servlet tasks, but also called directl
 local logs      = require "openLuup.logs"
 local devices   = require "openLuup.devices"            -- to access 'dataversion'
 local scheduler = require "openLuup.scheduler"
-local json      = require "openLuup.json"               -- for unit testing only
+local json      = require "rapidjson"               -- for unit testing only
 local wsapi     = require "openLuup.wsapi"              -- WSAPI connector for CGI processing
 local tables    = require "openLuup.servertables"       -- mimetypes and status_codes
 local loader    = require "openLuup.loader"             -- for raw_read()
@@ -81,7 +81,7 @@ local _log, _debug = logs.register (ABOUT)
 -- TABLES
 
 local mimetype = tables.mimetypes
-  
+
 local function file_type (filename)
   return filename: match "%.([^%.]+)$"     -- extract extension from filename
 end
@@ -107,7 +107,7 @@ end
 -- REQUEST HANDLER: /data_request?id=... queries only (could be GET or POST)
 --
 
--- add callbacks to the HTTP handler dispatch list  
+-- add callbacks to the HTTP handler dispatch list
 -- and remember the device context in which it's called
 -- fixed callback context - thanks @reneboer
 -- see: http://forum.micasaverde.com/index.php/topic,36207.msg269018.html#msg269018
@@ -119,37 +119,37 @@ local http_handler = {    -- the data_request?id=... handler dispatch list
   }
 
 local function add_callback_handlers (handlers, devNo)
-  for name, proc in pairs (handlers) do     
+  for name, proc in pairs (handlers) do
     http_handler[name] = {callback = proc, devNo = devNo, count = 0}
   end
 end
 
 local function data_request (wsapi_env, req, client)
-  _debug ((client or {}).ip or "internal") 
+  _debug ((client or {}).ip or "internal")
   -- 2019.07.29 use WSAPI request library to parse GET and POST parameters...
-  -- the library's built-in req.params mechanism is built on demand for an individual request parameter, 
+  -- the library's built-in req.params mechanism is built on demand for an individual request parameter,
   -- so not used here... this complete list is built from the GET and POST parameters individually
   local parameters = {}
   -- 2019.08.12 collapse table of multiple values to single (final) value
   -- 2019.10.12 only return non-zero length strings, thanks @a-lurker
   -- see: https://community.getvera.com/t/openluup-and-url-parameters/210507
-  local function last_value (x) 
-    local v = type(x) == "table" and x[#x] or x 
+  local function last_value (x)
+    local v = type(x) == "table" and x[#x] or x
     if #v > 0 then return v end
   end
   req = req or wsapi.request.new (wsapi_env)            -- request may have been prebuilt by data_request_task
   for n,v in pairs (req.POST) do parameters[n] = last_value (v) end
   for n,v in pairs (req.GET)  do parameters[n] = last_value (v) end  -- GET parameter overrides POST, if both defined
   -----
-  
+
   local ok, mtype
   local status = 501
   local id = parameters.id or '?'
   local content_type
   local response = "No handler for data_request?id=" .. id     -- 2016.05.17   log "No handler" responses
-  
+
   local handler = http_handler[id]
-  if handler and handler.callback then 
+  if handler and handler.callback then
     local format = parameters.output_format
     parameters.id = nil               -- don't pass on request id to user...
     parameters.output_format = nil    -- ...or output format in parameters
@@ -169,11 +169,11 @@ local function data_request (wsapi_env, req, client)
     handler.count  = (handler.count or 0) + 1            -- 2018.03.22
     handler.status = status
   end
-  
+
   if status ~= 200 then
     _log (response or 'not a data request')
   end
-  
+
   -- WSAPI-style return parameters: status, headers, iterator
   local response_headers = {
 --      ["Content-Length"] = #response,     -- with no length, allow chunked transfers
@@ -188,42 +188,42 @@ local function data_request_task (wsapi_env, respond, client)
   local request_start = scheduler.timenow ()
   local req = wsapi.request.new (wsapi_env)   -- use WSAPI library to parse GET and POST parameters
   local p = req.params
-  
+
   -- /data_request?DataVersion=...&MinimumDelay=...&Timeout=...
-  -- parameters have special significance for scheduling the job 
-  local Timeout      = tonumber (p.Timeout)                   -- (s)  respond after this time even if no data changes 
+  -- parameters have special significance for scheduling the job
+  local Timeout      = tonumber (p.Timeout)                   -- (s)  respond after this time even if no data changes
   local DataVersion  = tonumber (p.DataVersion)               --      previous data version value
   local MinimumDelay = tonumber (p.MinimumDelay or 0) * 1e-3  -- (ms) initial delay before responding
-  
+
   -- 2019.04.03  adjust MinimumDelay option from AltUI, it is a band-aid for Vera, openLuup queues responses anyway
   if MinimumDelay and p._ then   -- assume this request is from AltUI
     MinimumDelay = 0.1    -- 100ms
   end
-    
+
   local function job ()
-    
-    -- initial delay (possibly) 
-    if MinimumDelay and MinimumDelay > 0 then 
+
+    -- initial delay (possibly)
+    if MinimumDelay and MinimumDelay > 0 then
       local delay = MinimumDelay
       MinimumDelay = nil                                              -- don't do it again!
       return scheduler.state.WaitingToStart, delay
     end
-    
+
     -- DataVersion update or timeout (possibly)
-    if DataVersion 
+    if DataVersion
       and not (devices.dataversion.value > DataVersion)               -- no updates yet
       and scheduler.timenow() - request_start < (Timeout or 0) then   -- and not timed out
         return scheduler.state.WaitingToStart, 0.5                    -- wait a bit and try again
     end
-    
+
     -- finally (perhaps) execute the request
     local status, headers, iterator = data_request (wsapi_env, req, client)
-      
+
     if headers["Content-Type"] ~= "dontrespond" then respond (status, headers, iterator) end  -- 2020.01.29
-    
-    return scheduler.state.Done, 0  
+
+    return scheduler.state.Done, 0
   end
-  
+
   return {job = job}   -- return the task structure
 end
 
@@ -235,58 +235,58 @@ local file_handler = {}     -- table of requested files
 
 local function file_request (wsapi_env)
   local cache_control = tables.cache_control                 -- 2019.05.14  max-age indexed by filetype
-  
+
   local path = wsapi_env.SCRIPT_NAME
   if path: match "/$" then path = path .. "index.html" end   -- look for index.html in given directory
-  
+
   path = path: gsub ("%.%.", '')                    -- ban attempt to move up directory tree
   path = path: gsub ("^/", '')                      -- remove filesystem root from path
   path = path: gsub ("luvd/", '')                   -- no idea how this is handled in Luup, just remove it!
-  
+
   -- 2018.02.19  apply directory path aliases from server tables
   for old,new in pairs (tables.dir_alias) do
     path = path: gsub (old, new)
   end
-  
+
   local content_type = mime_file_type (path)
-  local status = 500  
+  local status = 500
   local response_headers = {}
-  
+
   -- 2018.07.15  use raw_read() for consistency in path search order
   -- 2019.04.12  remove vfs.read() here since raw_read now does an initial search of the cache
   local response = loader.raw_read (path)
-  
-  if response then 
+
+  if response then
     status = 200
     local ftype = file_type (path)
     local max_age = cache_control[ftype] or 0
     response_headers ["Cache-Control"] = "max-age=" .. max_age    -- 2019.05.14
     response_headers ["Content-Type"]  = content_type
-    
-    -- @explorer:  2016.04.14, Workaround for SONOS not liking chunked MP3 and some headers.       
+
+    -- @explorer:  2016.04.14, Workaround for SONOS not liking chunked MP3 and some headers.
     if ftype == "mp3"        -- 2016.04.28  @akbooer, change this to apply to ALL .mp3 files, fix 2019.05.14
-    or #response < 16000 
+    or #response < 16000
     then
-      response_headers ["Content-Length"] = #response    
+      response_headers ["Content-Length"] = #response
     end
-  
+
   else
     status = 404
-    response = "file not found:" .. path  
+    response = "file not found:" .. path
     response_headers ["Content-Type"]   = mimetype ["txt"]
-    response_headers ["Content-Length"] = #response    
+    response_headers ["Content-Length"] = #response
   end
- 
-  if status ~= 200 then 
-    _log (response) 
+
+  if status ~= 200 then
+    _log (response)
   end
-  
+
   local stats = file_handler[path] or {count = 0}   -- log statistics for console page
   stats.size = #response
   stats.status = status
   stats.count = stats.count + 1
   file_handler[path] = stats
-  
+
   return status, response_headers, make_iterator(response)
 end
 
@@ -301,7 +301,7 @@ local cgi_handler = {}
 local function cgi_request (wsapi_env)
   local path = wsapi_env.SCRIPT_NAME
   local status, headers, iterator = wsapi.cgi (wsapi_env)
-  
+
   local stats = cgi_handler[path] or {count = 0}   -- log statistics for console page
   stats.status = status
   stats.count = stats.count + 1
@@ -311,18 +311,18 @@ local function cgi_request (wsapi_env)
 end
 
 
--- return a task for the scheduler to handle file requests 
+-- return a task for the scheduler to handle file requests
 local function file_task (wsapi_env, respond)
   return {run = function () respond (file_request(wsapi_env)) end} -- immediate run action (no job)
 end
 
--- return a task for the scheduler to handle CGI requests 
+-- return a task for the scheduler to handle CGI requests
 local function cgi_task (wsapi_env, respond)
   return {run = function () respond (cgi_request(wsapi_env)) end} -- immediate run action (no job)
 end
 
 
--- 
+--
 -- define the appropriate handlers and tasks depending on request type
 --
 local exec_selector = {data_request = data_request}
@@ -353,25 +353,25 @@ end
 
 return {
     ABOUT = ABOUT,
-    
+
     TEST = {          -- for testing only
       data_request    = data_request,
       http_file       = file_request,
       make_iterator   = make_iterator,
       wsapi_cgi       = wsapi.cgi,
     },
-    
+
     -- variables
-    
+
     http_handler  = http_handler,    -- for console info, via server module
     file_handler  = file_handler,
     cgi_handler   = cgi_handler,
-    
+
     --methods
-    
+
     execute = execute,
     add_callback_handlers = add_callback_handlers,
-    
+
   }
 
 -----

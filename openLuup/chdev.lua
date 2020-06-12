@@ -74,7 +74,7 @@ local logs      = require "openLuup.logs"
 local devutil   = require "openLuup.devices"
 local loader    = require "openLuup.loader"
 local scheduler = require "openLuup.scheduler"
-local json      = require "openLuup.json"               -- for device.__tostring()
+local json      = require "rapidjson"               -- for device.__tostring()
 
 --  local _log() and _debug()
 local _log, _debug = logs.register (ABOUT)

@@ -385,9 +385,9 @@ local ABOUT = {
 
   local function clean_cjson_nulls (x)    -- 2020.05.20  replace any cjson.null with nil
     for n,v in pairs (x) do
-      if type(v) == "table" then 
-        clean_cjson_nulls (v) 
-      elseif v == cjson.null then 
+      if type(v) == "table" then
+        clean_cjson_nulls (v)
+      elseif v == cjson.null then
         x[n] = nil
       end
     end
@@ -397,9 +397,9 @@ local ABOUT = {
     local ok, msg, try1, try2
     if is_cj then                          -- 2020.04.12  use cjson module, if available
       ok, try1 = pcall (cjson.decode, json)
-      if ok then 
+      if ok then
         clean_cjson_nulls (try1)
-        return try1 
+        return try1
       end
     end
     try2, msg = decode (json)

@@ -22,7 +22,7 @@ local ABOUT = {
 ]]
 }
 
-local json  = require "openLuup.json"             -- for JSON device file encoding
+local json  = require "rapidjson"             -- for JSON device file encoding
 local xml   = require "openLuup.xml"              -- for XML device file encoding
 
 -- the loader cache is preset with these files

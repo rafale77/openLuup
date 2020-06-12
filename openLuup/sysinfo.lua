@@ -31,12 +31,12 @@ ABOUT = {
 -- 2018.07.28  updated to use wsapi.response library
 
 
-local json      = require "openLuup.json"
+local json      = require "rapidjson"
 local userdata  = require "openLuup.userdata"
 local wsapi     = require "openLuup.wsapi"
 
 
-local attr = userdata.attributes 
+local attr = userdata.attributes
 
 local original_MiOS_shell_script_returns =  -- using this, can easily insert new data
   {
@@ -86,13 +86,13 @@ local _log    -- defined from WSAPI environment as wsapi.error:write(...) in run
 -- global entry point called by WSAPI connector
 function run (wsapi_env)
   _log = function (...) wsapi_env.error:write(...) end      -- set up the log output, note colon syntax
-  
+
   _log "running sysinfo.sh WSAPI CGI"
 
   local res = wsapi.response.new ()         -- use the response library to build the response!
-  
+
   local j, err = json.encode (original_MiOS_shell_script_returns)
-  
+
   res:content_type "text/plain"
   res: write (j or err)                     -- return valid JSON, or error message
 

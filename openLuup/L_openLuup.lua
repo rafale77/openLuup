@@ -1,6 +1,6 @@
 ABOUT = {
   NAME          = "L_openLuup",
-  VERSION       = "2020.05.22",
+  VERSION       = "2020.05.12",
   DESCRIPTION   = "openLuup device plugin for openLuup!!",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2020 AKBooer",
@@ -62,7 +62,7 @@ ABOUT = {
 -- 2020.02.20  add EmptyRoom101 service action
 
 
-local json        = require "openLuup.json"
+local json        = require "rapidjson"
 local timers      = require "openLuup.timers"       -- for scheduled callbacks
 local ioutil      = require "openLuup.io"           -- NOT the same as luup.io or Lua's io.
 local pop3        = require "openLuup.pop3"

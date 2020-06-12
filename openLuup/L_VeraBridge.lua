@@ -124,7 +124,7 @@ ABOUT = {
 local devNo                      -- our device number
 
 local chdev     = require "openLuup.chdev"
-local json      = require "openLuup.json"
+local json      = require "rapidjson"
 local scenes    = require "openLuup.scenes"
 local userdata  = require "openLuup.userdata"
 local async     = require "openLuup.http_async"

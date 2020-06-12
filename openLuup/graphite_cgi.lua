@@ -55,7 +55,7 @@ ABOUT = {
 
 --[[
 
-Graphite_API 
+Graphite_API
 
   "Graphite-web, without the interface. Just the rendering HTTP API.
    This is a minimalistic API server that replicates the behavior of Graphite-web."
@@ -66,15 +66,15 @@ see:
 
 with great documentation at:
   http://graphite-api.readthedocs.org/en/latest/
-  
-  "Graphite-API is an alternative to Graphite-web, without any built-in dashboard. 
-   Its role is solely to fetch metrics from a time-series database (whisper, cyanite, etc.)
-   and rendering graphs or JSON data out of these time series. 
-   
-   It is meant to be consumed by any of the numerous Graphite dashboard applications."
-   
 
-Originally written in Python, I've converted some parts of it into Lua with slight tweaks 
+  "Graphite-API is an alternative to Graphite-web, without any built-in dashboard.
+   Its role is solely to fetch metrics from a time-series database (whisper, cyanite, etc.)
+   and rendering graphs or JSON data out of these time series.
+
+   It is meant to be consumed by any of the numerous Graphite dashboard applications."
+
+
+Originally written in Python, I've converted some parts of it into Lua with slight tweaks
 to interface to the DataYours implementation of Carbon / Graphite.
 
 It provides sophisticated searches of the database and the opportunity to link to additional databases.
@@ -86,7 +86,7 @@ I've written a finder specifically for the dataMine database, to replace the exi
 
 local url       = require "socket.url"
 local luup      = require "openLuup.luup"
-local json      = require "openLuup.json"
+local json      = require "rapidjson"
 local historian = require "openLuup.historian"
 local timers    = require "openLuup.timers"
 local xml       = require "openLuup.xml"
@@ -117,7 +117,7 @@ local function relativeTime  (time, now)     -- Graphite Render URL syntax, rela
   local duration = {s = 1, min = 60, h = 3600, d = 86400, w = 86400 * 7, mon = 86400 * 30, y = 86400 * 365}
   if not (unit and duration[unit]) then return end      -- must start with "-" and have a unit specifier
   now = now or os.time()
-  return now - number * duration[unit] * 0.998    -- so that a week-long archive (for example) fits into now - week 
+  return now - number * duration[unit] * 0.998    -- so that a week-long archive (for example) fits into now - week
 end
 
 local function getTime (time)                        -- convert relative or ISO 8601 times as necessary
@@ -133,7 +133,7 @@ local function jsonify(data, status, headers, jsonp)
   headers = headers or {}
 
   local body, errmsg = json.encode (data)
-  body = body or json.encode {errors = {json = errmsg or "Unknown error"}} or 
+  body = body or json.encode {errors = {json = errmsg or "Unknown error"}} or
           '{"errors":{"json": "Unknown error"}}'
   if jsonp then
       headers['Content-Type'] = 'text/javascript'
@@ -157,9 +157,9 @@ end
 --[[
 /metrics/find/?format=treejson&query=stats.gauges.*
 
-    [{"leaf": 0, "context": {}, "text": "echo_server", 
+    [{"leaf": 0, "context": {}, "text": "echo_server",
          "expandable": 1, "id": "stats.gauges.echo_server", "allowChildren": 1},
-     {"leaf": 0, "context": {}, "text": "vamsi", 
+     {"leaf": 0, "context": {}, "text": "vamsi",
          "expandable": 1, "id": "stats.gauges.vamsi", "allowChildren": 1},
      {"leaf": 0, "context": {}, "text": "vamsi-server",
          "expandable": 1, "id": "stats.gauges.vamsi-server", "allowChildren": 1}
@@ -223,13 +223,13 @@ local function metrics_find (_, p)
   if next (errors) then
       return jsonify({errors = errors}, 400, nil, p.jsonp)
   end
-  
+
   local formatter
   local format_options = {completer = completer, treejson = treejson}
   formatter = format_options[p.format or ''] or treejson  -- 2016.10.20  change default format
-  
+
   for i in storage.find (query) do metrics[#metrics+1] = formatter (i) end
-  
+
   if formatter == completer then metrics = {metrics = metrics} end    -- 2016.10.20
   return jsonify (metrics, 200,  nil, p.jsonp)
 end
@@ -320,7 +320,7 @@ Aliases...
 
 alias(seriesList, newName)
 
-    Takes one metric or a wildcard seriesList and a string in quotes. 
+    Takes one metric or a wildcard seriesList and a string in quotes.
     Prints the string instead of the metric name in the legend.
 
     &target=alias(Sales.widgets.largeBlue,"Large Blue Widgets")
@@ -333,7 +333,7 @@ aliasByMetric(seriesList)
 
 aliasByNode(seriesList, *nodes)
 
-    Takes a seriesList and applies an alias derived from one or more “node” portion/s of the target name. 
+    Takes a seriesList and applies an alias derived from one or more “node” portion/s of the target name.
     Node indices are 0 indexed.
 
     &target=aliasByNode(ganglia.*.cpu.load5,1)
@@ -350,7 +350,7 @@ TODO: aliasSub(seriesList, search, replace)
 local function target (p)
 
   local function noalias (t) return t end
-  
+
   local function alias (t, args) return ((args[1] or t): gsub ('"','')) end -- remove surrounding quotes
 
   local function aliasByMetric (t)
@@ -366,12 +366,12 @@ local function target (p)
   end
 
   local aliasType = {alias = alias, aliasByMetric = aliasByMetric, aliasByNode = aliasByNode}
-  
+
   -- separate possible function call from actual target spec
   local function parse (targetSpec)
     local fct,arg = targetSpec: match "(%w+)(%b())"
     local args = {}
-    if fct then 
+    if fct then
       -- Bad news:  some arguments contain commas, eg. {a,b}
       local arg2 = arg: gsub("%b{}", function (x) return (x: gsub(',','|')) end)  -- replace {a,b} with {a|b}
       arg2: gsub ("[^%(%),]+", function (x) args[#args+1] = x end) -- pull out the arguments
@@ -381,11 +381,11 @@ local function target (p)
     local function nameof(x) return (aliasType[fct] or noalias) (x, args) end
     return targetSpec, nameof
   end
-    
+
   local function nextTarget ()
     for _,targetSpec in ipairs (p.target) do
       local target, nameof = parse (targetSpec)
-      for node in storage.find (target) do 
+      for node in storage.find (target) do
         if node.is_leaf then
           local tv = node.fetch (p["from"], p["until"])
           coroutine.yield (nameof(node.path), tv)
@@ -393,7 +393,7 @@ local function target (p)
       end
     end
   end
-  
+
   return {next = function () return coroutine.wrap (nextTarget) end}
 
 end
@@ -426,9 +426,9 @@ local function jsonRender (_, p)
   --    [6.0, 1311836012]
   --  ]
   --}]
-  
+
   if ABOUT.DEBUG then _log ("RENDER: ", (json.encode(p))) end
-  
+
   -- the data structure is not very complex, and it's far more efficient to generate this directly
   -- than first building a Lua table and then converting it to JSON.  So that's what this does.
   local data = {'[',''}
@@ -455,7 +455,7 @@ end
 local function makeYaxis(yMin, yMax, ticks)
 --[[
   converted from PHP here: http://code.i-harness.com/en/q/4fc17
-  
+
   // This routine creates the Y axis values for a graph.
   //
   // Calculate Min amd Max graphical labels and graph
@@ -478,7 +478,7 @@ local function makeYaxis(yMin, yMax, ticks)
     yMin = yMin - 10;   -- some small value
     yMax = yMax + 10;   --some small value
   end
-  
+
   local range = yMax - yMin    -- Determine Range
   local tempStep = range/ticks    -- Get raw step value
 
@@ -520,18 +520,18 @@ end
 
 local function svgRender (_, p)
   --  return "[]", 200, {["Content-Type"] = "application/json"}
-  -- An empty response is just sufficient for Grafana to recognise that a 
+  -- An empty response is just sufficient for Grafana to recognise that a
   -- graphite_api server is available, thereafter it uses its own rendering.
   -- but we can do better with a simple SVG plot.
   -- note: this svg format does not include Graphite's embedded metadata object
   local Xscale, Yscale = 10000, 1000    -- SVG viewport scale
-  
+
   -- scale tv structure given array 0-1 to min/max of series
   local function scale (tv)
     local V, T = {}, {}
     local vmin, vmax
     local fmin, fmax = math.min, math.max
-    
+
     for _,v,t in tv:ipairs() do
       if v then
         T[#T+1] = t
@@ -540,68 +540,68 @@ local function svgRender (_, p)
         vmin = fmin (vmin or v, v)
       end
     end
-    
+
     if #T < 2 then return end
     vmax = math.ceil (p.yMax or vmax)
     vmin = math.floor (p.yMin or vmin)
-    
+
     local v = makeYaxis(vmin, vmax, 5)
     if vmin < v[1]  then table.insert (v, 1, vmin) end
     if vmax > v[#v] then table.insert (v, vmax) end
     V.ticks, vmin, vmax = v, v[1], v[#v]
-    
+
     local tmin, tmax = T[1], T[#T]      -- times are sorted, so we know where to find min and max
     if tmin == tmax then tmax = tmax + 1 end
     if vmin == vmax then vmax = vmax + 1 end
-    
+
     T.scale = Xscale / (tmax - tmin)
     V.scale = Yscale / (vmax - vmin)
-     
+
     T.min, T.max = tmin, tmax
     V.min, V.max = vmin, vmax
     return T, V
   end
-    
+
   -- fetch the data
-  
+
   local svgs = {}   -- separate SVGs for multiple plots
-  
+
   local function timeformat (epoch)
     local t = os.date ("%d %b '%y, %X", epoch):gsub ("^0", '')
     return t
   end
-  
+
   -- get the convenience factory methods for HTML and SVG
   local h = xml.createHTMLDocument "Graphics"
   local s = xml.createSVGDocument {}
 
   local function new_plot ()
     return s.svg {
-        height = p.height or "300px", 
+        height = p.height or "300px",
         width = p.width or "90%",
         viewBox = table.concat ({0, -Yscale/10, Xscale, 1.1 * Yscale}, ' '),
         preserveAspectRatio = "none",
         style ="border: none; margin-left: 5%; margin-right: 5%;",
       }
   end
-  
+
   local function no_data (svg)
     svg:appendChild (s.text (2000, Yscale/2, {"No Data",     -- TODO: move to external style sheet?
-          style = "font-size:180pt; fill:Crimson; font-family:Arial; transform:scale(2,1)"} ) )   
+          style = "font-size:180pt; fill:Crimson; font-family:Arial; transform:scale(2,1)"} ) )
   end
-  
+
   for name, tv in target (p).next() do
-    
+
     local T, V = scale (tv)
     local svg = new_plot ()
     if not T then
-      no_data (svg)   
+      no_data (svg)
     else
-      -- construct the data rows for plotting  
+      -- construct the data rows for plotting
       local d = {}    -- i.e. s.createDocumentFragment ()
-         
+
       local floor = math.floor
-      
+
       local Tscale, Vscale = T.scale, V.scale
       local Tmin, Vmin = T.min, V.min
       local T1, V1 = T[1], V[1]
@@ -616,7 +616,7 @@ local function svgRender (_, p)
         d[#d+1] = s.rect (t1, Yscale-v1, t2-t1, v1, {class="bar", popup})
                           t1, v1, T1, V1, T1_label = t2, v2, T2, V2, T2_label
       end
-      
+
       -- add the axes
       for _,y in ipairs (V.ticks) do
         -- need to scale
@@ -626,24 +626,24 @@ local function svgRender (_, p)
       end
       local left  = h.span {style="float:left",  timeformat (T.min)}
       local right = h.span {style="float:right", timeformat (T.max)}
-      local hscale = h.p {style="margin-left: 5%; margin-right: 5%; color:Grey; font-family:Arial; ", 
+      local hscale = h.p {style="margin-left: 5%; margin-right: 5%; color:Grey; font-family:Arial; ",
                   left, right, h.br ()}
       svg:appendChild (d)
       svg = h.div {p.vtitle or '', svg, h.br(), hscale}
     end
-    
+
     svgs[#svgs+1] = h.div {h.h4 {p.title or name, style="font-family: Arial;"}, svg}
   end
-  
+
   if #svgs == 0 then          -- 2019.04.26
     local svg = new_plot ()
     no_data (svg)
     svgs[1] = svg
   end
-  
--- add the options    
+
+-- add the options
   local cpu = timers.cpu_clock ()
-  
+
   h.documentElement[1]:appendChild {    -- append to <HEAD>
         h.meta {charset="utf-8"},
         h.style {[[
@@ -655,7 +655,7 @@ local function svgRender (_, p)
   h.body:appendChild (svgs)
 
   local doc = tostring (h)
-  
+
   cpu = timers.cpu_clock () - cpu
 
   local render = "render: CPU = %.3f ms"
@@ -681,7 +681,7 @@ local function render (env, p)
   local puntil =  p["until"]
   p["from"]  = getTime (pfrom)  or now - 24*60*60  -- default to 24 hours ago
   p["until"] = getTime (puntil) or now
-  
+
   local format = p.format or "svg"
   local reportStyle = {csv = csvRender, svg = svgRender, json = jsonRender}
   return (reportStyle[format] or svgRender) (env, p, storage)
@@ -727,22 +727,22 @@ function run (wsapi_env)
   local req = wsapi.request.new (wsapi_env)
   local p = req.GET
   local p2 = req.POST
-  
+
   if wsapi_env.CONTENT_TYPE == "application/json" then
     local content = wsapi_env.input:read ()
-    p2 = json.decode (content)    
+    p2 = json.decode (content)
   end
 
-  for name,value in pairs (p2 or {}) do p[name] = p[name] or value end    -- don't override existing value  
+  for name,value in pairs (p2 or {}) do p[name] = p[name] or value end    -- don't override existing value
   if type (p.target) ~= "table" then p.target= {p.target} end             -- target is ALWAYS an array
-  
+
   local script = wsapi_env.SCRIPT_NAME
   script = script: match "^(.-)/?$"      -- ignore trailing '/'
-  
+
   local handler = dispatch[script] or function () return "Not Implemented: " .. script, 501 end
 
-  local _, response, status, headers = pcall (handler, wsapi_env, p)  
-  
+  local _, response, status, headers = pcall (handler, wsapi_env, p)
+
   return status or 500, headers or {}, function () local x = response; response = nil; return x end
 end
 
@@ -754,7 +754,7 @@ end
 
   -- Store()
   -- low-functionality version of Graphite API Store module
-  -- assumes no identical paths from any of the finders (they all have their own branches) 
+  -- assumes no identical paths from any of the finders (they all have their own branches)
   local function Store (finders)
     local function find (pattern)
       for _,finder in ipairs (finders) do
@@ -765,7 +765,7 @@ end
     end
     -- Store()
     return {find =     -- find is an iterator which yields nodes
-        function(x) 
+        function(x)
           return coroutine.wrap (function() find(x) end)
         end
       }
@@ -779,7 +779,7 @@ end
     sid  = "urn:akbooer-com:serviceId:DataYours1",
   }
   for i,d in pairs (luup.devices) do
-    if d.device_type == dy.type 
+    if d.device_type == dy.type
     and d.device_num_parent == 0 then  -- 2016.10.24
       LOCAL_DATA_DIR = luup.variable_get (dy.sid, "LOCAL_DATA_DIR", i)
       DATAMINE_DIR = luup.variable_get (dy.sid, "DATAMINE_DIR", i)
@@ -790,7 +790,7 @@ end
   -- get historian config
   local history = luup.attr_get "openLuup.Historian" or {}
 
-  -- create a configuration for the various finders  
+  -- create a configuration for the various finders
   local config = {
     whisper = {
       directories = {LOCAL_DATA_DIR},
@@ -802,7 +802,7 @@ end
     },
     historian = history,
   }
-  
+
   local Finders = {historian.finder (config) }     -- 2018.06.02  Data Historian's own finder
 
   if isFinders then   -- if DataYours is installed, then add its finders if not already handled
@@ -813,7 +813,7 @@ end
       Finders[#Finders + 1] = finders.datamine.DataMineFinder (config)
     end
   end
-  
+
   storage = Store (Finders)    --  instead of DataYours graphite_api.storage.Store()
 
 -----

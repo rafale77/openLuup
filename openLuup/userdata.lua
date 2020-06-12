@@ -74,7 +74,7 @@ local ABOUT = {
 -- 2020.03.31   improve plugin loading and ordering
 
 
-local json    = require "openLuup.json"
+local json    = require "rapidjson"
 local logs    = require "openLuup.logs"
 local scenes  = require "openLuup.scenes"
 local chdev   = require "openLuup.chdev"

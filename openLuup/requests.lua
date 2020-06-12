@@ -34,7 +34,7 @@ local ABOUT = {
 -- 2016.03.15  add update for openLuup version downloads
 -- 2016.04.10  add scene active and status flags in sdata and status reports
 -- 2016.04.25  openLuup update changes
--- 2016.04.29  add actual device status to status response 
+-- 2016.04.29  add actual device status to status response
 -- 2016.05.18  generic update_plugin request for latest version
 -- 2016.05.23  fix &id=altui plugin numbering string (thanks @amg0)
 -- 2016.06.04  remove luup.reload() from device delete action: AltUI requests reload anyway
@@ -80,7 +80,7 @@ local ABOUT = {
 
 local client        = require "openLuup.client"
 local server        = require "openLuup.server"
-local json          = require "openLuup.json"
+local json          = require "rapidjson"
 local scheduler     = require "openLuup.scheduler"
 local devutil       = require "openLuup.devices"      -- for dataversion
 local logs          = require "openLuup.logs"
@@ -107,12 +107,12 @@ local function device_present (device_type)
   end
 end
 
-  
+
 local function spairs (x, fsort)  -- sorted pairs iterator
   local i = 0
   local I = {}
   local function iterator () i = i+1; return I[i], x[I[i]] end
-  
+
   for n in pairs(x) do I[#I+1] = n end
   table.sort(I, fsort)
   return iterator
@@ -149,17 +149,17 @@ local function sections_table ()
   return { {name = "My Home", id = 1} }
 end
 
-local function iprequests_table () 
+local function iprequests_table ()
   local info = {}
   for _,x in pairs (server.iprequests) do
     info[#info + 1] = x
   end
-  return info 
+  return info
 end
 
 local function static_data ()
   local sd = {}
-  for _, data in pairs (loader.static_data) do    -- bundle up the JSON data for all devices 
+  for _, data in pairs (loader.static_data) do    -- bundle up the JSON data for all devices
     sd[#sd+1] = data
   end
   return sd
@@ -170,7 +170,7 @@ end
 --
 
 -- device
--- This renames or deletes a device. Use action=rename or action=delete. 
+-- This renames or deletes a device. Use action=rename or action=delete.
 -- For rename, you can optionally assign a room by passing either the ID or the name.
 --
 --   http://ip_address:3480/data_request?id=device&action=rename&device=5&name=Chandelier&room=3
@@ -189,7 +189,7 @@ local function device (_,p)
   local function delete ()
     local tag = {}                -- list of devices to delete
     local function tag_children (n)
-      tag[#tag+1] = n 
+      tag[#tag+1] = n
       for i,d in pairs (luup.devices) do
         if d.device_num_parent == n then tag_children (i) end
       end
@@ -197,7 +197,7 @@ local function device (_,p)
     tag_children(devNo)           -- find all the children, grand-children, etc...
     for _,j in pairs (tag) do
       luup.devices[j] = nil
-    end    
+    end
     scenes.verify_all()           -- 2016.03.11 ensure there are no references to these devices in scene actions
     -- AltUI variable watch triggers will have to take care of themselves!
   end
@@ -214,29 +214,29 @@ end
 
 
 -- invoke
--- This request shows the list of devices and the actions they support 
--- through the UPnP services specified in their UPnP device description file. 
+-- This request shows the list of devices and the actions they support
+-- through the UPnP services specified in their UPnP device description file.
 -- Only the actions with a star (*) preceding their name are implemented.
 --
 --    http://ip_address:3480/data_request?id=invoke
 --    http://ip_address:3480/data_request?id=invoke&DeviceNum=6
---    http://ip_address:3480/data_request?id=invoke&UDN=uuid:4d494342-5342-5645-0002-000000000002 
+--    http://ip_address:3480/data_request?id=invoke&UDN=uuid:4d494342-5342-5645-0002-000000000002
 --
 local function invoke (_, p)
   -- produces a page with hot links to each device and scene, or, ...
   -- ...if a device number is given, produces a list of device services and actions
   local hag   = "urn:micasaverde-com:serviceId:HomeAutomationGateway1"
-  
+
   local html    = [[<!DOCTYPE html> <head><title>Remote Control</title></head> <body>%s</body> </html>]]
   local Device  = [[<a href="data_request?id=lu_invoke&DeviceNum=%d"> #%d %s</a><br>]]
-  local Scene   = [[<a href="data_request?id=action&serviceId=%s&action=RunScene&SceneNum=%d"> #%d %s</a><br>]]  
+  local Scene   = [[<a href="data_request?id=action&serviceId=%s&action=RunScene&SceneNum=%d"> #%d %s</a><br>]]
   local Action  = [[<a href="data_request?id=action&DeviceNum=%d&serviceId=%s&action=%s">%s%s</a><br>]]
   local Service = [[<br><i>%s</i><br>]]
 
   local body
   local D, S = {}, {}
   local dev = luup.devices[tonumber(p.DeviceNum)]
-  
+
   -- sort by name and parent/child structure? Too much trouble!
   if dev then
     -- Services and Actions for specific device
@@ -255,12 +255,12 @@ local function invoke (_, p)
     for n,d in spairs(luup.devices) do
       D[#D+1] = Device:format (n, n, d.description)
     end
-    
+
     local S = {}
     for n,s in spairs(luup.scenes) do
       S[#S+1] = Scene:format (hag, n, n, s.description)
     end
-    
+
     body = table.concat {table.concat (D, '\n'), "<br>Scenes:<br>", table.concat (S, '\n')}
   end
   return html: format (body)
@@ -268,17 +268,17 @@ end
 
 
 -- actions   (thanks to @rigpapa for pointing this out to me)
--- This returns all the XML with all the UPNP device description documents. 
--- Use: http://ip_address:3480/data_request?id=device&output_format=xml&DeviceNum=x 
+-- This returns all the XML with all the UPNP device description documents.
+-- Use: http://ip_address:3480/data_request?id=device&output_format=xml&DeviceNum=x
 -- [or &UDN=y -- NOT implemented] to narrow it down.
 local function actions (_, p)
   local S = {}
-  
+
   local dev = luup.devices[tonumber(p.DeviceNum)]
-  if not dev then 
+  if not dev then
     return "BAD_DEVICE", "text/plain"
   end
-  
+
   for _, svc in ipairs (dev.serviceList or {}) do
     local A = {}
     local s = svc.serviceId
@@ -293,7 +293,7 @@ local function actions (_, p)
       A[#A+1] = {name = act.name, arguments = args}
     end
   end
-  
+
   local j, err = json.encode {serviceList = S}
   j = j or {error = err or "unknown error"}
   return j, "application/json"
@@ -301,11 +301,11 @@ end
 
 
 -- Returns the recent IP requests in order by most recent first, [ACTUALLY, IT'S NOT ORDERED]
--- including information about devices in use and if the IP is blacklisted (ignored by the plug and play mechanism).  [NOT IMPLEMENTED] 
+-- including information about devices in use and if the IP is blacklisted (ignored by the plug and play mechanism).  [NOT IMPLEMENTED]
 -- Optionally append timeout to specify the oldest IP request in seconds.  [NOT IMPLEMENTED]
-local function iprequests () 
+local function iprequests ()
   local ips = json.encode({ip_requests = iprequests_table ()})
-  return ips, "application/json" 
+  return ips, "application/json"
 end
 
 --
@@ -350,8 +350,8 @@ local function sdata_scenes_table ()
   return info
 end
 
--- This is an abbreviated form of user_data and status (sdata = summary data). 
--- It allows a user interface that is only worried about control, and not detailed configuration, 
+-- This is an abbreviated form of user_data and status (sdata = summary data).
+-- It allows a user interface that is only worried about control, and not detailed configuration,
 -- to get a summary of the data that would normally be presented to the user and to monitor the changes.
 -- http://VeraIP:3480/data_request?id=sdata&output_format=json
 local function sdata(...)
@@ -371,13 +371,13 @@ local function sdata(...)
     version = luup.attr_get "BuildVersion",
   }
   return json.encode (sdata) or 'error in sdata', "application/json"
-end 
+end
 --
 -- STATUS
 --
 
 local function status_devices_table (device_list, data_version)
-  local info 
+  local info
   -- 2019.04.19  build job info for devices
   local error_status = {[scheduler.state.Error] = true, [scheduler.state.Aborted] = true}
   local jobs_by_device = {}    -- list of jobs indexed by device
@@ -394,10 +394,10 @@ local function status_devices_table (device_list, data_version)
       jobs_by_device[devNo] = d_info
     end
   end
-  
+
   local dv = data_version or 0
 --  local dev_dv
-  for i,d in pairs (device_list) do 
+  for i,d in pairs (device_list) do
     local dev_status, dev_message = d:status_get()
     dev_status  = dev_status or -1
     dev_message = dev_message or ''
@@ -408,7 +408,7 @@ local function status_devices_table (device_list, data_version)
 --      local states = {}
 --      for i,item in ipairs(d.variables) do
 --        states[i] = {
---          id = item.id, 
+--          id = item.id,
 --          service = item.srv,
 --          variable = item.name,
 --          value = item.value or '',
@@ -422,11 +422,11 @@ local function status_devices_table (device_list, data_version)
         tooltip = {display = "1", tag2 = dev_message}
       end
       local status = {
-        id = i, 
+        id = i,
         status = dev_status,
         tooltip = tooltip,
         Jobs = jobs_by_device[i],                -- 2019.04.19
-        PendingJobs = 0, 
+        PendingJobs = 0,
         states = states
       }
       info[#info+1] = status
@@ -457,7 +457,7 @@ local function status_startup_table ()
       tasks[#tasks + 1] = {
         id = id,
         status = job.status,
-        type = job.type or ("device_no_" .. (job.devNo or '(system)')), 
+        type = job.type or ("device_no_" .. (job.devNo or '(system)')),
         comments = job.notes,
       }
     end
@@ -465,16 +465,16 @@ local function status_startup_table ()
   return startup
 end
 
--- This returns the current status for all devices including all the current UPnP variables and the status of any active jobs. 
+-- This returns the current status for all devices including all the current UPnP variables and the status of any active jobs.
 -- http://172.16.42.14:3480/data_request?id=status&DeviceNum=47
 local function status (_,p)
   local status = {                                -- basic top level attributes
     alerts = {},
     TimeStamp = os.time(),
-    Mode = tonumber(luup.attr_get "Mode"),       
+    Mode = tonumber(luup.attr_get "Mode"),
     LoadTime = timers.loadtime,
     DataVersion = devutil.dataversion.value,
-    UserData_DataVersion = devutil.userdata_dataversion.value 
+    UserData_DataVersion = devutil.userdata_dataversion.value
   }
   local d = os.date "*t"
   local x = os.date ("%Y-%m-%d %H:%M:%S")   -- LocalTime = "2015-07-26 14:23:50 D" (daylight savings)
@@ -484,18 +484,18 @@ local function status (_,p)
   local DeviceNum = tonumber(p.DeviceNum)
   if DeviceNum then                                     -- specific device
     if not luup.devices[DeviceNum] then return "Bad Device" end
-    device_list = {[DeviceNum] = luup.devices[DeviceNum]} 
+    device_list = {[DeviceNum] = luup.devices[DeviceNum]}
   else                                                  -- ALL devices
   end
   local info = status_devices_table (device_list, dv)
-  if DeviceNum then 
---        (info[1].id or _) = nil    
+  if DeviceNum then
+--        (info[1].id or _) = nil
     status["Device_Num_"..DeviceNum] = (info or {})[1]
-  else 
+  else
     status.devices = info
     status.startup = {tasks = {}}
     status.scenes  = status_scenes_table ()
-    status.startup = status_startup_table () 
+    status.startup = status_startup_table ()
   end
   --TODO: status.visible_devices = ?
   return json.encode (status) or 'error in status', "application/json"
@@ -524,18 +524,18 @@ local function user_scenes_table()
   return scenes
 end
 
--- This returns the configuration data for Vera, 
+-- This returns the configuration data for Vera,
 -- which is a list of all devices and the UPnP variables which are persisted between resets
 -- as well as rooms, names, and other data the user sets as part of the configuration.
-local function user_data (_,p) 
+local function user_data (_,p)
   local result = "NO_CHANGES"
   local mime_type = "text/plain"
   local dv = tonumber(p.DataVersion)
   local distance = math.abs (devutil.dataversion.value - (dv or 0))
-  if not dv 
-  or (dv < devutil.dataversion.value) 
+  if not dv
+  or (dv < devutil.dataversion.value)
   or distance > 1000        -- ignore silly values
-  then 
+  then
     local user_data2 = {
       LoadTime = timers.loadtime,
       DataVersion = devutil.userdata_dataversion.value, -- NB: NOT the same as the status DataVersion
@@ -577,7 +577,7 @@ end
 --Example: http://ip_address:3480/data_request?id=room&action=rename&room=5&name=Garage
 --Example: http://ip_address:3480/data_request?id=room&action=delete&room=5
 
---This creates, renames, or deletes a room depending on the action. 
+--This creates, renames, or deletes a room depending on the action.
 --To rename or delete a room you must pass the room id for the with room=N.
 --
 local function room (_,p)
@@ -602,12 +602,12 @@ end
 
 SCENES
 
-When using the 'create' command json must be valid JSON for a scene as documented in Scene_Syntax. 
-The name, room and optional id (if you're overwriting an existing scene) are passed in the json, so nothing is on the command line except the json. 
+When using the 'create' command json must be valid JSON for a scene as documented in Scene_Syntax.
+The name, room and optional id (if you're overwriting an existing scene) are passed in the json, so nothing is on the command line except the json.
 
-Because the json data can be long it is recommended to send it as an http POST instead of GET with the data passed with the name "json" 
+Because the json data can be long it is recommended to send it as an http POST instead of GET with the data passed with the name "json"
 
-list returns the JSON data for an existing scene. 
+list returns the JSON data for an existing scene.
 
 Example: http://ip_address:3480/data_request?id=scene&action=rename&scene=5&name=Chandalier&room=Garage
 Example: http://ip_address:3480/data_request?id=scene&action=delete&scene=5
@@ -616,19 +616,19 @@ Example: http://ip_address:3480/data_request?id=scene&action=list&scene=5
 
 --]]
 
-local function scene (_,p)  
+local function scene (_,p)
   local name = (p.name ~= '') and p.name
   local room = (p.room ~= '') and p.room
   local number = tonumber (p.scene)
   local response
   --Example: http://ip_address:3480/data_request?id=scene&action=delete&scene=5
-  local function delete (scene) 
-    if scene then 
+  local function delete (scene)
+    if scene then
       scenes.delete (scene.definition.id) -- remove reference to the scene
     end
   end
   --Example: http://ip_address:3480/data_request?id=scene&action=create&json=[valid json data]
-  local function create () 
+  local function create ()
     local new_scene, msg = scenes.create (p.json, os.time())    -- 2020.03.08 add new creation date
     if new_scene then
       local id = new_scene.definition.id
@@ -640,7 +640,7 @@ local function scene (_,p)
     return msg    -- nil if all OK
   end
   --Example: http://ip_address:3480/data_request?id=scene&action=rename&scene=5&name=Chandelier&room=Garage
-  local function rename (scene) 
+  local function rename (scene)
     local new_room_num
     if room then
       local room_index = {}
@@ -671,7 +671,7 @@ local function variableset (_,p)
   if (not p.serviceId) and p.Variable then
     luup.attr_set (p.Variable, p.Value, devNo)
   else
-    luup.variable_set (p.serviceId, p.Variable, p.Value or '', devNo) 
+    luup.variable_set (p.serviceId, p.Variable, p.Value or '', devNo)
   end
   return "OK"
 end
@@ -684,12 +684,12 @@ local function variableget (_,p)
   if devNo == 0 and p.Variable then
     result = tostring (userdata.attributes[p.Variable])
   else
-    result = luup.variable_get (p.serviceId, p.Variable, devNo) 
+    result = luup.variable_get (p.serviceId, p.Variable, devNo)
   end
   return result
 end
 
--- reports the current energy usage in a tab delimited format. 
+-- reports the current energy usage in a tab delimited format.
 local function live_energy_usage ()
   local live_energy_usage = {}
   local sid = "urn:micasaverde-com:serviceId:EnergyMetering1"
@@ -697,14 +697,14 @@ local function live_energy_usage ()
   for devNo, dev in pairs (luup.devices) do
     local svc = dev.services[sid]
     if svc then
-      local Watts = svc.variables.Watts 
+      local Watts = svc.variables.Watts
       if Watts and tonumber (Watts.value)then       -- 2017.01.10 thanks @reneboer
         local room = luup.rooms[dev.room_num or 0] or ''
         local line = fmt: format (devNo, dev.description, room, dev.category_num, Watts.value)
         live_energy_usage[#live_energy_usage+1] = line
       end
     end
-  end 
+  end
   return table.concat (live_energy_usage, '\n')
 end
 
@@ -747,8 +747,8 @@ local function action (_,p,f)
 end
 
 -- jobstatus
--- Returns the status of a job. 
--- The parameters are job, which is the job ID and optionally plugin, which is the plugin name. 
+-- Returns the status of a job.
+-- The parameters are job, which is the job ID and optionally plugin, which is the plugin name.
 -- For a Z-Wave job the plugin parameter must be zwave. [NOT IMPLEMENTED]
 -- If job is invalid the status returned is -1.
 
@@ -765,10 +765,10 @@ end
 Returns an image from a camera. This fetches the image from the camera using the URL variable for the device. Pass arguments:
 
 cam = the device id of the camera.  This is the only mandatory argument.
-res = optional: a resolution, which gets appended to the variable.  
+res = optional: a resolution, which gets appended to the variable.
       So passing "low" means the image from the URL_low variable will be returned.
       If it doesn't exist it reverts to the standard URL or DirectStreamingURL
-timeout = optional: how long to wait for the image to be retrieved, 
+timeout = optional: how long to wait for the image to be retrieved,
       or how long to retrieve video. defaults to 10 seconds.
 url = optional: override the camera's default URL
 ip = optional: override the camera's default ip
@@ -783,16 +783,16 @@ local function request_image (_, p)
   local devNo = tonumber(p.cam)
   local cam = luup.devices[devNo]
   local response
-  
+
   if cam then
     local url = p.url or luup.variable_get (sid, "URL", devNo) or ''
     local ip = p.ip or luup.attr_get ("ip", devNo) or ''
-    
+
     -- note, once again, the glaring inconsistencies in Vera naming conventions
-    local user = p.user or luup.attr_get ("username", devNo) 
-    local pass = p.pass or luup.attr_get ("password", devNo) 
+    local user = p.user or luup.attr_get ("username", devNo)
+    local pass = p.pass or luup.attr_get ("password", devNo)
     local timeout = tonumber(p.timeout) or 10
-    
+
     if url then
       _, image, status = luup.inet.wget ("http://" .. ip .. url, timeout, user, pass)
       if status ~= 200 then
@@ -803,7 +803,7 @@ local function request_image (_, p)
   else
     response = "No such device"   -- TODO: return image of this message
   end
-  
+
   if image then
     return image, "image/jpeg"
   else
@@ -820,15 +820,15 @@ Parameters:
 
     cam: the device # of the camera.
     duration: the duration, in seconds, of the video. The default value is 60 seconds.
-    format: set it to 1 for snapshots. If this is missing or has any other value, 
-              the archive will be a MJPEG video. 
+    format: set it to 1 for snapshots. If this is missing or has any other value,
+              the archive will be a MJPEG video.
 
 --]]
 local function archive_video (_, p)       -- 2018.04.09
   local response
   for a,b in pairs (p) do p[a:lower()] = b end    -- wrap parameters to lowercase, so no confusions
-  
-  if p.format == "1" then 
+
+  if p.format == "1" then
     if p.cam then
       local image, contentType = request_image (_, {cam = p.cam})
       if contentType == "image/jpeg" then
@@ -850,9 +850,9 @@ local function archive_video (_, p)       -- 2018.04.09
       response = "no such device"
     end
   else
-    response = "Video Archive NOT IMPLEMENTED (only snapshots)" 
+    response = "Video Archive NOT IMPLEMENTED (only snapshots)"
   end
-  
+
   _log (response)
   return response
 end
@@ -862,7 +862,7 @@ end
 
 PLUGIN UPDATES: THINGS TO KNOW:
 
-From the Plugins page, AltUI issues two types of requests 
+From the Plugins page, AltUI issues two types of requests
 depending on whether or not anything is entered into the Update box:
 
 empty request to openLuup:
@@ -888,28 +888,28 @@ This, for example, is an update request from AltUI after a browser refresh disco
 -- update_plugin ()
 -- This is a genuine Vera-style request for an update
 -- originated from the Update button of the plugins page
--- the TracRev parameter (pre-GitHub!) is used by AltUI to override the MiOS Version number 
-local function update_plugin (_,p) 
-  
+-- the TracRev parameter (pre-GitHub!) is used by AltUI to override the MiOS Version number
+local function update_plugin (_,p)
+
   local Plugin = p.PluginNum or p.Plugin
   local tag = p.TracRev or p.Version          -- pecking order for parameter names
   local meta, errmsg = userdata.plugin_metadata (Plugin, tag)
-    
+
   if meta then
     local sid = "urn:upnp-org:serviceId:AltAppStore1"
     local act = "update_plugin"
     local arg = {metadata = json.encode (meta)}
     local dev = device_present "urn:schemas-upnp-org:device:AltAppStore:1"
-    
+
     _, errmsg = luup.call_action (sid, act, arg, dev)       -- actual install
-    
+
     -- NOTE: that the above action executes asynchronously and the function call
     --       returns immediately, so you CAN'T do a luup.reload() here !!
     --       (it's done at the end of the <job> part of the called action)
   end
-  
+
   if errmsg then _log (errmsg) end
-  return errmsg or "OK", "text/plain" 
+  return errmsg or "OK", "text/plain"
 end
 
 -- delete_plugin ()
@@ -921,7 +921,7 @@ local function delete_plugin (_, p)
     table.remove (userdata.attributes.InstalledPlugins2, idx)   -- move all the higher indices down, also
     _log ("removing plugin devices of type: " .. (device_type or '?'))
     for devNo, d in pairs (luup.devices) do                     -- remove associated devices....
-      if (d.device_type == device_type) 
+      if (d.device_type == device_type)
       and (d.device_num_parent == 0) then     -- local device of correct type...
         _log ("delete device #" .. devNo)
         local msg = device (_, {action="delete", device=devNo}) -- call device action in this module
@@ -939,10 +939,10 @@ end
 --
 
 --  TODO: add &id=lua&DeviceNum=xxx request
-local function lua ()    -- 2018.04.22 
+local function lua ()    -- 2018.04.22
   local lines = {}
   local function pr (x) lines[#lines+1] = x end
-  
+
   pr "--Devices with UPNP implementations:"
 
   -- implementation files
@@ -974,9 +974,9 @@ end
 local function alive () return "OK" end
 
 -- file access
-local function file (_,p) 
-  local _,f = client.wget ("http://localhost:3480/" .. (p.parameters or '')) 
-  return f 
+local function file (_,p)
+  local _,f = client.wget ("http://localhost:3480/" .. (p.parameters or ''))
+  return f
 end
 
 -- reload openLuup
@@ -1016,8 +1016,8 @@ local function exit () scheduler.stop() ; return ("requested openLuup exit at ".
 --
 
 local luup_requests = {
-  
-  action              = action, 
+
+  action              = action,
   actions             = actions,
   alive               = alive,
   archive_video       = archive_video,
@@ -1033,14 +1033,14 @@ local luup_requests = {
   request_image       = request_image,
   room                = room,
   scene               = scene,
-  sdata               = sdata, 
+  sdata               = sdata,
   static              = static,
-  status              = status, 
-  status2             = status, 
-  user_data           = user_data, 
+  status              = status,
+  status2             = status,
+  user_data           = user_data,
   user_data2          = user_data,
   update_plugin       = update_plugin,      -- download latest plugin version
-  variableget         = variableget, 
+  variableget         = variableget,
   variableset         = variableset,
 }
 
@@ -1055,7 +1055,7 @@ local openLuup_specials = {
 do -- CALLBACK HANDLERS
   -- Register lu_* style (ie. luup system, not luup user) callbacks with HTTP server
   local extendedList = {}
-  for name, proc in pairs (luup_requests) do 
+  for name, proc in pairs (luup_requests) do
     extendedList[name]        = proc
     extendedList["lu_"..name] = proc              -- add compatibility with old-style call names
   end
@@ -1071,5 +1071,3 @@ luup_requests.ABOUT = ABOUT   -- add module info (NOT part of request list!)
 return luup_requests
 
 ------------
-
-
