@@ -62,6 +62,7 @@ local ABOUT = {
 -- 2020.04.03  use optional arg[2] to define HTTP server port
 -- 2020.04.23  update Ace editor link to https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.11/ace.js
 -- 2020.05.01  log json module version info (thanks @a-lurker)
+-- 2020.06.20  Remove logging of json logging as it will be rapidjson from here on. @rafale77
 
 
 local logs  = require "openLuup.logs"
@@ -92,14 +93,6 @@ local mime  = require "mime"
 logs.banner (compress.ABOUT)    -- doesn't announce itself
 logs.banner (timers.ABOUT)      -- ditto
 logs.banner (logs.ABOUT)        -- ditto
-
---logs.banner (json.ABOUT)
---if json.C then
---local rapidjson_banner = "using rapidjson %s for fast decoding"
---  _log (rapidjson_banner: format (json.C._VERSION or "(unknown version)"))
---else
---  _log ("rapidjson not installed - using openLuup.json.Lua.decode() instead")
---end
 
 -- heartbeat monitor for memory usage and checkpointing
 local chkpt = 1
