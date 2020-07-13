@@ -1,13 +1,13 @@
 local ABOUT = {
   NAME          = "openLuup.loader",
-  VERSION       = "2019.11.07",
+  VERSION       = "2020.07.04",
   DESCRIPTION   = "Loader for Device, Service, Implementation, and JSON files",
   AUTHOR        = "@akbooer",
-  COPYRIGHT     = "(c) 2013-2019 AKBooer",
+  COPYRIGHT     = "(c) 2013-2020 AKBooer",
   DOCUMENTATION = "https://github.com/akbooer/openLuup/tree/master/Documentation",
   DEBUG         = false,
   LICENSE       = [[
-  Copyright 2013-2019 AK Booer
+  Copyright 2013-2020 AK Booer
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -117,7 +117,6 @@ local service_data = {}         -- cache for serviceType and serviceId data, ind
 
 local static_data = {}          -- cache for decoded static JSON data, indexed by filename
 
-
 ----
 --
 -- CONSTANTS
@@ -178,9 +177,9 @@ end
 
 --  utilities
 
+----------------------------
+--
 -- 2019.06.11 add pretty() to shared environment:
-
-
 -- pretty (),
 -- pretty-print for Lua
 -- 2014.06.26   @akbooer
@@ -192,9 +191,6 @@ end
 -- 2016.02.26   use rawget to investigate array numeric indices, preload enc[_G] = _G only
 -- 2016.03.10   fix for {nil,nil, 3,nil,5}
 -- 2019.06.25   fix for out of order discontiguous numeric indices {nil,nil,3, [42]=42, nil,nil,nil,7,8,9}
-
-----------------------------
-
 
 function shared_environment.pretty (Lua)        -- 2014 - 2019.06.25   @akbooer
   local L, N_NILS = {}, 2                       -- number of allowed nils between contiguous numeric indices
