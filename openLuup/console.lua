@@ -103,7 +103,7 @@ local timers    = require "openLuup.timers"       -- for startup time
 local whisper   = require "openLuup.whisper"
 local wsapi     = require "openLuup.wsapi"        -- for response library
 local loader    = require "openLuup.loader"       -- for static data (devices page)
-local json      = require "openLuup.json"         -- for console_menus.json
+local json      = require "rapidjson"         -- for console_menus.json
 local panels    = require "openLuup.panels"       -- for default console device panels
 local xml       = require "openLuup.xml"          -- for HTML constructors
 
