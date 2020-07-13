@@ -45,10 +45,12 @@ local wsapi     = require "openLuup.wsapi"              -- to build WSAPI reques
 
 local http      = require "luajit-request"
 local https     = http
+local luajit    = true
 if not http then
   local http    = require "socket.http"
   local https   = require "ssl.https"
   local OKmd5,md5 = pcall (require, "md5")                -- for digest authentication (may be missing)
+  local luajit    = false
 end
 
 --  local _log() and _debug()
@@ -94,7 +96,7 @@ local _request = function(t, Timeout)
   local user, pass = URL.user, URL.password     -- may or may not be present
   local scheme = URL.scheme == "https" and https or http
 
-  if jit then
+  if luajit then
     local result = http.request(t.url)
     if result["code"] == 401 then
       local meth = t.method or "GET"
