@@ -32,26 +32,20 @@ local ABOUT = {
 
 -- 2019.07.30  split from openLuup.server
 -- 2019.10.14  added start() function, called from server, to allow use of arbitrary port
--- 2020.07.02  added LuaJIT-request libcurl base
+
 
 local url       = require "socket.url"
+local http      = require "socket.http"
+local https     = require "ssl.https"
 local ltn12     = require "ltn12"                       -- for wget handling
 --local mime      = require "mime"                        -- for basic authorization in wget
+
+local OKmd5,md5 = pcall (require, "md5")                -- for digest authenication (may be missing)
 
 local logs      = require "openLuup.logs"
 local tables    = require "openLuup.servertables"       -- mimetypes and status_codes
 local servlet   = require "openLuup.servlet"
 local wsapi     = require "openLuup.wsapi"              -- to build WSAPI request environment
-
-local http      = require "luajit-request"
-local https     = http
-local luajit    = true
-if not http then
-  local http    = require "socket.http"
-  local https   = require "ssl.https"
-  local OKmd5,md5 = pcall (require, "md5")                -- for digest authentication (may be missing)
-  local luajit    = false
-end
 
 --  local _log() and _debug()
 local _log, _debug = logs.register (ABOUT)
@@ -89,69 +83,54 @@ local function hash(...) return md5.sumhexa(table.concat({...}, ":")) end
 -- this requires the lua-md5 module to be on the Lua path
 --
 local _request = function(t, Timeout)
-
+  local URL = url.parse(t.url)
+  local user, password = URL.user, URL.password     -- may or may not be present
+  local scheme = URL.scheme == "https" and https or http
+  scheme.TIMEOUT = Timeout or 5
 
   -- TODO: limited number of redirects
-  local URL = url.parse(t.url)
-  local user, pass = URL.user, URL.password     -- may or may not be present
-  local scheme = URL.scheme == "https" and https or http
+  local b, c, h = scheme.request(t)                 -- if user/password then this tries Basic authorization
+  if (c == 401) and h["www-authenticate"] then      -- else try digest
+    local ht = parse_header(h["www-authenticate"])
 
-  if luajit then
-    local result = http.request(t.url)
-    if result["code"] == 401 then
-      local meth = t.method or "GET"
-      result = http.request(t.url, {
-        method = meth,
-        auth_type = "digest",
-        username = user,
-        password = pass
-        })
+    assert(ht.realm and ht.nonce, "missing realm or nonce in received WWW-Authenticate header")
+    if not OKmd5 then
+      return nil, "MD5 module not available for digest authorization"
     end
-    b, c, h = result["body"], result["code"], result["headers"]
-  else
-    scheme.TIMEOUT = Timeout or 5
-    local b, c, h = scheme.request(t)                 -- if user/password then this tries Basic authorization
-    if ((c == 401) and h["www-authenticate"]) then
-      local ht = parse_header(h["www-authenticate"])
-      assert(ht.realm and ht.nonce, "missing realm or nonce in received WWW-Authenticate header")
-      if not OKmd5 then
-        return nil, "MD5 module not available for digest authorization"
-      end
-      if ht.qop ~= "auth" then
-        return nil, string.format("unsupported qop (%s)", tostring(ht.qop))
-      end
-      if ht.algorithm and (ht.algorithm:lower() ~= "md5") then
-        return nil, string.format("unsupported algorithm (%s)", tostring(ht.algorithm))
-      end
-
-      local nc, cnonce = "00000001", ("%08x"): format (os.time())
-      local uri = url.build{path = URL.path, query = URL.query}
-      local meth = t.method or "GET"
-      local response = hash(
-        hash(user or '', ht.realm, pass or ''),
-        ht.nonce,
-        nc,
-        cnonce,
-        "auth",
-        hash(meth, uri)
-      )
-
-      t.headers = t.headers or {}
-      t.headers.authorization = make_digest_header {
-        username = user,
-        realm = ht.realm,
-        nonce = ht.nonce,
-        uri = uri,
-        cnonce = cnonce,
-        nc = nc,
-        qop = "auth",
-        algorithm = "MD5",
-        response = response,
-        opaque = ht.opaque,
-      }
-
-      b, c, h = scheme.request(t)
+    if ht.qop ~= "auth" then
+      return nil, string.format("unsupported qop (%s)", tostring(ht.qop))
     end
+    if ht.algorithm and (ht.algorithm:lower() ~= "md5") then
+      return nil, string.format("unsupported algorithm (%s)", tostring(ht.algorithm))
+    end
+
+    local nc, cnonce = "00000001", ("%08x"): format (os.time())
+    local uri = url.build{path = URL.path, query = URL.query}
+    local method = t.method or "GET"
+    local response = hash(
+      hash(user or '', ht.realm, password or ''),
+      ht.nonce,
+      nc,
+      cnonce,
+      "auth",
+      hash(method, uri)
+    )
+
+    t.headers = t.headers or {}
+    t.headers.authorization = make_digest_header {
+      username = user,
+      realm = ht.realm,
+      nonce = ht.nonce,
+      uri = uri,
+      cnonce = cnonce,
+      nc = nc,
+      qop = "auth",
+      algorithm = "MD5",
+      response = response,
+      opaque = ht.opaque,
+    }
+
+    b, c, h = scheme.request(t)
   end
   return b, c, h
 end
