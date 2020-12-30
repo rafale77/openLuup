@@ -262,7 +262,7 @@ local function create (x)
       mac                 = a.mac,
       pass                = a.password or '',
       room_num            = tonumber(a.room),         -- 2018.07.02
-      subcategory_num     = a.subcategory_num,
+      subcategory_num     = tonumber(a.subcategory_num),
       udn                 = a.local_udn,
       user                = a.username or '',
     }
@@ -449,7 +449,7 @@ end
 local function create_device (
       device_type, internal_id, description, upnp_file, upnp_impl,
       ip, mac, hidden, invisible, parent, room, pluginnum, statevariables,
-      pnpid, nochildsync, aeskey, reload, nodupid
+      pnpid, nochildsync, aeskey, reload, nodupid, category_num, subcategory_num
   )
   local devNo = next_device_number ()
   local dev = create {
@@ -472,6 +472,8 @@ local function create_device (
     aeskey = aeskey,                    -- (string)   no idea
     reload = reload,                    -- (boolean)
     nodupid = nodupid,                  -- (boolean)  no idea
+    category_num = category_num,        -- (number)
+    subcategory_num = subcategory_num,  -- (number)
   }
   return devNo, dev
 end
