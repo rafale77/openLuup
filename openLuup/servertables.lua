@@ -1,4 +1,4 @@
-local VERSION = "2019.08.01"
+local VERSION = "2020.10.27"
 
 -- mimetypes
 -- 2016/04/14
@@ -23,7 +23,7 @@ local VERSION = "2019.08.01"
 -- 2018.06.12  added Data Historian Disk Archive Whisper schemas and aggregations
 -- 2018.08.20  added *Time* to nocache rules
 -- 2018.12.31  start to add retentions, xFF and aggregation to Historian archive_rules
- 
+
 -- 2019.04.08  added image/svg+xml to mimetypes
 -- 2019.04.18  remove historian in-memory cache rules (now implemented in devices module)
 -- 2019.06.11  cache control definitions moved here from servlet module
@@ -33,20 +33,20 @@ local VERSION = "2019.08.01"
 
 local socket = require "socket"
 
-local function myIP ()    
+local function myIP ()
   local mySocket = socket.udp ()
   mySocket:setpeername ("42.42.42.42", "424242")  -- arbitrary IP and PORT
-  local ip = mySocket:getsockname () 
+  local ip = mySocket:getsockname ()
   mySocket: close()
   return ip or "127.0.0.1"
 end
 
 
 local mimetypes = {
-  css  = "text/css", 
+  css  = "text/css",
   gif  = "image/gif",
-  html = "text/html", 
-  htm  = "text/html", 
+  html = "text/html",
+  htm  = "text/html",
   ico  = "image/x-icon",
   jpeg = "image/jpeg",
   jpg  = "image/jpeg",
@@ -143,14 +143,20 @@ local smtp_codes = {
 local cgi_prefix = {
     "cgi",          -- standard CGI directory
     "cgi-bin",      -- ditto
-    
+
     "console",      -- openLuup console interface
     "openLuup",     -- console alias
-    
+
     "dashboard",    -- for graphite_api
     "metrics",      -- ditto
     "render",       -- ditto
-    
+
+    "shelly",       -- for Shelly-like api
+    "relay",        -- ditto
+    "scene",        -- ditto
+    "status",       -- ditto
+    "settings",     -- ditto
+
     "ZWaveAPI",     -- Z-Wave.me Advanced API (requires Z-Way plugin)
     "ZAutomation",  -- Z-Wave.me Virtual Device API
   }
@@ -160,12 +166,12 @@ local cgi_prefix = {
 local graphite_cgi  = "openLuup/graphite_cgi.lua"
 
 local cgi_alias = setmetatable ({
-    
+
     ["cgi-bin/cmh/backup.sh"]     = "openLuup/backup.lua",
     ["cgi-bin/cmh/sysinfo.sh"]    = "openLuup/sysinfo.lua",
     ["console"]                   = "openLuup/console.lua",
     ["openLuup"]                  = "openLuup/console.lua",
-    
+
     -- graphite_api support
     ["metrics"]             = graphite_cgi,
     ["metrics/find"]        = graphite_cgi,
@@ -173,10 +179,18 @@ local cgi_alias = setmetatable ({
     ["metrics/index.json"]  = graphite_cgi,
     ["render"]              = graphite_cgi,
   },
-  
-  -- TODO: REMOVE special handling of Zway requests (all directed to same handler)
+
   { __index = function (_, path)
-      if path: match "^ZWaveAPI"
+      -- Shelly-like API for switches and scenes
+      if path: match "^shelly"
+      or path: match "^relay"
+      or path: match "^scene"
+      or path: match "^settings"
+      or path: match "^status" then
+        return "openLuup/shelly_cgi.lua"
+
+      -- TODO: REMOVE special handling of Zway requests (all directed to same handler)
+      elseif path: match "^ZWaveAPI"
       or path: match "^ZAutomation" then
         return "cgi/zway_cgi.lua"
       end
@@ -188,15 +202,15 @@ local cgi_alias = setmetatable ({
 local dir_alias = {
     ["cmh/skins/default/img/devices/device_states/"] = "icons/",  -- redirect UI7 icon requests
     ["cmh/skins/default/icons/"] = "icons/",                      -- redirect UI5 icon requests
-    ["cmh/skins/default/img/icons/"] = "icons/" ,                 -- 2017.11.14 
+    ["cmh/skins/default/img/icons/"] = "icons/" ,                 -- 2017.11.14
   }
- 
+
 -- cache retentions (used by file servlet)
 local cache_control = {                 -- 2019.05.14  max-age in seconds indexed by filetype
-  png = 3600, 
-  svg = 3600, 
-  css = 3600, 
-  ico = 3600, 
+  png = 3600,
+  svg = 3600,
+  css = 3600,
+  ico = 3600,
   xml = 3600,
 }
 
@@ -208,38 +222,38 @@ local cache_control = {                 -- 2019.05.14  max-age in seconds indexe
 
 local archive_rules = {
     {
-      schema   = "every_1s", 
+      schema   = "every_1s",
       patterns = {"*.*.Tripped"},
       -- TODO: add retentions, xFF and aggregation method, and deprecate indirect reference to .conf files
       retentions = "1s:1m,1m:1d,10m:7d,1h:30d,3h:1y,1d:10y",
       xFilesFactor = 0,
       aggregationMethod = "maximum",
     },{
-      schema   = "every_1m", 
+      schema   = "every_1m",
       patterns = {"*.*.Status"},
     },{
-      schema   = "every_5m", 
+      schema   = "every_5m",
       patterns = {"*.*{openLuup,DataYours,EventWatcher}*.*"},
     },{
-      schema   = "every_10m", 
+      schema   = "every_10m",
       patterns = {
         "*.*.Current*",                 -- temperature, humidity, generic sensors, setpoint...
 --        "*.*.{Max,Min}Temp",            -- max/min values (which also use an aggregation rule)
       },
     },{
-      schema   = "every_20m", 
+      schema   = "every_20m",
       patterns = {"*.*EnergyMetering*.{KWH,Watts,kWh24}"},
     },{
-      schema   = "every_1h", 
+      schema   = "every_1h",
       patterns = {},
     },{
-      schema   = "every_3h", 
+      schema   = "every_3h",
       patterns = {},
     },{
-      schema   = "every_6h", 
+      schema   = "every_6h",
       patterns = {},
     },{
-      schema   = "every_1d", 
+      schema   = "every_1d",
       patterns = {"*.*.BatteryLevel"},
     },
   }
@@ -258,5 +272,5 @@ return {
     cache_control   = cache_control,      -- for file servlet
     archive_rules   = archive_rules,      -- for historian
   }
-  
+
 -----

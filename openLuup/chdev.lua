@@ -1,6 +1,6 @@
 local ABOUT = {
   NAME          = "openLuup.chdev",
-  VERSION       = "2020.03.07",
+  VERSION       = "2020.12.26",
   DESCRIPTION   = "device creation and luup.chdev submodule",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2020 AKBooer",
@@ -67,6 +67,9 @@ local ABOUT = {
 -- 2020.02.09  add newindex() to keep integrity of visible luup.device[] structure
 -- 2020.02.12  add Bridge utilities (mapped to luup.openLuup.bridge.*)
 -- 2020.03.07  add ZWay bridge to device startup priorities
+-- 2020.12.19  allow luup.chdev.append() to change device name (thanks @rigpapa)
+-- 2020.12.23  add Ezlo bridge to scheduler startup priorities (thanks @rigpapa)
+-- 2020.12.26  make status request honour dataversion number for variables (thanks @rigpapa)
 
 
 local logs      = require "openLuup.logs"
@@ -118,6 +121,7 @@ local function varlist_to_table (statevariables)
   return vars
 end
 
+local function non_empty(x) return x and x:match "%S" and x end
 
 --
 -- function: create (x)
@@ -133,6 +137,7 @@ local function create (x)
   _debug (x.description)
   local dev = devutil.new (x.devNo)   -- create the proto-device
   local services = dev.services
+
   local parent = tonumber (x.parent) or 0
   local parent_device = luup.devices[parent] or {}
   local do_not_implement = parent_device.handle_children     -- ignore device implementation file if parent handles it
@@ -178,13 +183,13 @@ local function create (x)
   local job_priority = {
     openLuup = 1,
     ["urn:schemas-upnp-org:device:altui:1"] = 3,
+    ["urn:schemas-rboer-com:device:EzloBridge:1"] = 5,
     VeraBridge = 5,
     ZWay = 5}         -- 2020.03.07
   local cat_num = tonumber (x.category_num or d.category_num or loader.cat_by_dev[device_type])   -- 2019.06.02
   local priority = job_priority[device_type]
 
   -- schedule device startup code
-  local function non_empty(x) return x and x:match "%S" and x end
   local device_name = non_empty (x.description)
                         or d.friendly_name or "Device_" .. x.devNo  -- 2019.08.29 check non-empty name
   if d.entry_point then
@@ -197,6 +202,7 @@ local function create (x)
       _log (fmt: format (x.devNo), "luup.create_device")
     end
   end
+
   -- set known attributes
   dev:attr_set {
     id              = x.devNo,                                          -- device id
@@ -256,7 +262,7 @@ local function create (x)
       mac                 = a.mac,
       pass                = a.password or '',
       room_num            = tonumber(a.room),         -- 2018.07.02
-      subcategory_num     = tonumber(a.subcategory_num),
+      subcategory_num     = a.subcategory_num,
       udn                 = a.local_udn,
       user                = a.username or '',
     }
@@ -311,15 +317,19 @@ local function create (x)
   -- this is the basic user_data for the device variables
   -- the id=user_data and id=status requests embellish this in different ways
   -- used by userdata.devices_table() and requests.status_devices_table()
-  function dev:state_table ()      -- 2019.05.12
+  function dev:state_table (dv)       -- 2019.05.12
+    dv = dv or 0                      -- 2020.12.26  implement versioning
     local states = {}
     for i,item in ipairs(self.variables) do
-      states[i] = {
-        id = item.id,
-        service = item.srv,
-        variable = item.name,
-        value = item.value or '',
-      }
+      local version = item.version or dv + 1
+      if version > dv then
+        states[#states+1] = {
+          id = item.id,
+          service = item.srv,
+          variable = item.name,
+          value = item.value or '',
+        }
+      end
     end
     return states
   end
@@ -439,7 +449,7 @@ end
 local function create_device (
       device_type, internal_id, description, upnp_file, upnp_impl,
       ip, mac, hidden, invisible, parent, room, pluginnum, statevariables,
-      pnpid, nochildsync, aeskey, reload, nodupid, category_num, subcategory_num
+      pnpid, nochildsync, aeskey, reload, nodupid
   )
   local devNo = next_device_number ()
   local dev = create {
@@ -462,8 +472,6 @@ local function create_device (
     aeskey = aeskey,                    -- (string)   no idea
     reload = reload,                    -- (boolean)
     nodupid = nodupid,                  -- (boolean)  no idea
-    category_num = category_num,        -- (number)
-    subcategory_num = subcategory_num,  -- (number)
   }
   return devNo, dev
 end
@@ -526,8 +534,14 @@ local function append (device, ptr, altid, description, device_type, device_file
   assert (not ptr.seen[altid], "duplicate altid in chdev.append()")  -- no return status, so raise error
   ptr.seen[altid] = true
 
-  if ptr.old[altid] then
+  local dno = ptr.old[altid]
+  if dno then
     ptr.old[altid] = nil        -- it existed already
+    if non_empty(description) then      -- 2020.12.19
+      local dev = luup.devices[dno]
+      dev.description = description
+      dev.attributes.name = description
+    end
   else
     ptr.reload = true           -- we will need a reload
     room = tonumber(room) or 0
