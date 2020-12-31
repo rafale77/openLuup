@@ -110,7 +110,6 @@ local mime  = require "mime"
 logs.banner (compress.ABOUT)    -- doesn't announce itself
 logs.banner (timers.ABOUT)      -- ditto
 logs.banner (logs.ABOUT)        -- ditto
-logs.banner (json.ABOUT)
 
 -- heartbeat monitor for memory usage and checkpointing
 local chkpt = 1
