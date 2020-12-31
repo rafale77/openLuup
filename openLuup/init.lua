@@ -110,14 +110,7 @@ local mime  = require "mime"
 logs.banner (compress.ABOUT)    -- doesn't announce itself
 logs.banner (timers.ABOUT)      -- ditto
 logs.banner (logs.ABOUT)        -- ditto
-
---logs.banner (json.ABOUT)
---if json.C then
---local rapidjson_banner = "using rapidjson %s for fast decoding"
---  _log (rapidjson_banner: format (json.C._VERSION or "(unknown version)"))
---else
---  _log ("rapidjson not installed - using openLuup.json.Lua.decode() instead")
---end
+logs.banner (json.ABOUT)
 
 -- heartbeat monitor for memory usage and checkpointing
 local chkpt = 1
