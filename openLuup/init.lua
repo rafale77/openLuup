@@ -93,7 +93,7 @@ local loader = require "openLuup.loader"  -- keep this first... it prototypes th
 luup = require "openLuup.luup"            -- here's the GLOBAL luup environment
 
 luup.openLuup.req_table = req_table       -- make the require table accessible
-
+local server        = require "openLuup.server"   -- HTTP server
       scheduler     = require "openLuup.scheduler"  -- already declared local
 local client        = require "openLuup.client"     -- HTTP client
 local server        = require "openLuup.server"     -- HTTP server
@@ -110,6 +110,14 @@ local mime  = require "mime"
 logs.banner (compress.ABOUT)    -- doesn't announce itself
 logs.banner (timers.ABOUT)      -- ditto
 logs.banner (logs.ABOUT)        -- ditto
+
+--logs.banner (json.ABOUT)
+--if json.C then
+--local rapidjson_banner = "using rapidjson %s for fast decoding"
+--  _log (rapidjson_banner: format (json.C._VERSION or "(unknown version)"))
+--else
+--  _log ("rapidjson not installed - using openLuup.json.Lua.decode() instead")
+--end
 
 -- heartbeat monitor for memory usage and checkpointing
 local chkpt = 1
