@@ -93,7 +93,6 @@ local loader = require "openLuup.loader"  -- keep this first... it prototypes th
 luup = require "openLuup.luup"            -- here's the GLOBAL luup environment
 
 luup.openLuup.req_table = req_table       -- make the require table accessible
-local server        = require "openLuup.server"   -- HTTP server
       scheduler     = require "openLuup.scheduler"  -- already declared local
 local client        = require "openLuup.client"     -- HTTP client
 local server        = require "openLuup.server"     -- HTTP server
