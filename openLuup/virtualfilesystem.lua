@@ -592,7 +592,7 @@ local D_ZWay_xml = Device {
 
 
 local D_ZWay_json = json.encode {
-  default_icon = "http://raw.githubusercontent.com/akbooer/Z-Way/master/icons/Z-Wave.me.png",
+  default_icon = "Z-Wave.me.png",
   DeviceType = "ZWay",
   Tabs = {{
       Label = Label ("tabname_control", "Control"),
@@ -678,7 +678,7 @@ local D_ShellyBridge_xml = Device {
 
 
 local D_ShellyBridge_json = json.encode {
-  default_icon = "https://pbs.twimg.com/profile_images/1317058087929450505/Vw2yKX4S.jpg",
+  default_icon = "Shelly.jpg",
   DeviceType = "ShellyBridge",
   Tabs = {{
 --      Label = Label ("tabname_control", "Control"),
