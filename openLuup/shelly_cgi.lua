@@ -35,7 +35,7 @@ local ABOUT = {
 -- 2020.02.01  add Shelly Bridge
 
 --local socket    = require "socket"
-local json      = require "openLuup.json"
+local json      = require "rapidjson"
 local luup      = require "openLuup.luup"
 local requests  = require "openLuup.requests"         -- for data_request?id=status response
 local chdev     = require "openLuup.chdev"            -- to create new bridge devices
