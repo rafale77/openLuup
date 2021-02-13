@@ -134,6 +134,7 @@ local options = luup.attr_get "openLuup.Console" or {}   -- get configuration pa
       EditorTheme = "eclipse",
 ]]
 --
+options.Ace_URL = "http://192.168.0.51:3480/altui/ace.js"
 
 local service_data  = loader.service_data
 
@@ -372,7 +373,7 @@ end
 
 local function user_defined_ui (d)
   local dtype = (d.attributes.device_type or ''): match "(%w+):?%d*$"   -- pick the last word
-  return user_defined or user_defined[dtype] or empty
+  return user_defined and user_defined[dtype] or empty
 end
 
 local function get_device_icon (d)
