@@ -382,8 +382,6 @@ local function variable_set (service, name, value, device, startup)
   local security  = "urn:micasaverde-com:serviceId:SecuritySensor1"
   if (name ~= "Tripped") or (service ~= security) or dev.attributes.host then return end  -- not interested
 
-  set ("LastTrip", tostring(os.time()))
-
   -- 2018.08.05  AutoUntrip functionality (thanks for the suggestion @rigpapa)
 
   local untrip = dev:variable_get (service, "AutoUntrip") or {}
@@ -404,6 +402,7 @@ local function variable_set (service, name, value, device, startup)
   local isArmed = Armed.value == '1'
 
   if value == '1' then
+    set ("LastTrip", tostring(os.time()))
     if isArmed then set ("ArmedTripped", '1') end
     if untrip > 0 then timers.call_delay (clear, untrip, '', "AutoUntrip device #" .. device) end
   else
