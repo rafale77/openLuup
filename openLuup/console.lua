@@ -134,7 +134,6 @@ local options = luup.attr_get "openLuup.Console" or {}   -- get configuration pa
       EditorTheme = "eclipse",
 ]]
 --
-options.Ace_URL = "http://192.168.0.51:3480/altui/ace.js"
 
 local service_data  = loader.service_data
 
@@ -1675,14 +1674,15 @@ local function device_controls (d)
   srv = d.services[SID.dimming]
   if srv then    -- we need a slider
     local LoadLevelTarget = (srv.variables.LoadLevelTarget or empty).value or 0
+    local LoadLevelStatus = (srv.variables.LoadLevelStatus or empty).value or 0
     slider = xhtml.form {
       oninput="LoadLevelTarget.value = slider.valueAsNumber + ' %'",
       action=selfref (), method="post",
         xhtml.input {name="action", value="slider", hidden=1},
         xhtml.input {name="dev", value=d.attributes.id, hidden=1},
-        xhtml.output {name="LoadLevelTarget", ["for"]="slider", value=LoadLevelTarget, LoadLevelTarget .. '%'},
+        xhtml.output {name="LoadLevelStatus", ["for"]="slider", value=LoadLevelStatus, LoadLevelStatus .. '%'},
         xhtml.input {type="range", name="slider", onchange="this.form.submit();",
-          value=LoadLevelTarget, min=0, max=100, step=1},
+          value=LoadLevelStatus, min=0, max=100, step=1},
       }
   end
   return switch, slider
