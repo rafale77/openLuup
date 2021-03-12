@@ -1,6 +1,6 @@
 ABOUT = {
   NAME          = "L_openLuup",
-  VERSION       = "2021.03.07",
+  VERSION       = "2021.03.11b",
   DESCRIPTION   = "openLuup device plugin for openLuup!!",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2021 AKBooer",
@@ -437,6 +437,73 @@ function EmptyRoom101 (p)           -- 2020.02.20
   end
 end
 
+------------------------
+--
+-- MQTT updates
+--
+
+local mqtt_devnums, mqtt_next
+
+local function get_next_dev ()
+  if not mqtt_devnums then
+    mqtt_devnums = {}
+    for n in pairs(luup.devices) do
+      mqtt_devnums[#mqtt_devnums + 1] = n
+    end
+    mqtt_next = 1
+  end
+  local dev = luup.devices[mqtt_devnums[mqtt_next]]
+  mqtt_next = mqtt_next + 1
+  if mqtt_next > #mqtt_devnums then mqtt_devnums = nil end
+  return dev    -- may be nil, if device was recently deleted
+end
+
+local function mqtt_dev_json (d)
+  local info = {}
+  for _, srv in pairs(d.services) do
+    local s = {}
+    info[srv.shortSid] = s
+    for v, var in pairs (srv.variables) do
+      s[v] = var.value
+    end
+  end
+
+  local D = {[tostring(d.devNo)] = info}
+  local message = json.encode(D)
+  return message
+end
+
+local function mqtt_round_robin ()
+  local mqtt = luup.openLuup.mqtt
+  local dt = luup.attr_get "openLuup.MQTT.PublishDeviceStatus"
+  if dt == "0" then
+    dt = 1    -- set default delay time
+  else
+    local dd = get_next_dev ()
+    if dd then
+      local message = mqtt_dev_json (dd)
+      mqtt.publish ("openLuup/status", message)
+    end
+  end
+  timers.call_delay (mqtt_round_robin, dt, '', "MQTT openLuup/status")
+end
+
+-- see: https://mosquitto.org/man/mosquitto-8.html
+local function mqtt_sys_broker_stats ()
+  local mqtt = luup.openLuup.mqtt
+  local topic = "$SYS/broker/"
+  -- augment client stats
+  local stats = mqtt.statistics
+  local nc = 0
+  for _ in pairs(mqtt.iprequests) do nc = nc + 1 end    -- count the clients
+  stats["clients/total"] = nc
+  stats["clients/connected"] = nc
+  stats["clients/maximum"] = math.max (stats["clients/maximum"], nc)
+  for n, v in pairs (stats) do
+    mqtt.publish (topic..n, tostring(v))
+  end
+  timers.call_delay (mqtt_sys_broker_stats, 60, '', "MQTT $SYS/broker/#")
+end
 
 ------------------------
 --
@@ -623,6 +690,16 @@ function init (devNo)
         _log (dsp .. (err or ''))
       end
     end
+  end
+
+  do -- MQTT updates
+    local p = luup.attr_get "openLuup.MQTT.PublishVariableUpdates"
+    if p == "true" then
+      luup.log "starting MQTT round-robin device status messages"
+    end
+    mqtt_round_robin ()   -- ... but start the timer anyway, in case it's turned on later
+    luup.log "starting MQTT $SYS/broker statistics"
+    mqtt_sys_broker_stats ()
   end
 
   set ("StartTime", luup.attr_get "openLuup.Status.StartTime")        -- 2018.05.02

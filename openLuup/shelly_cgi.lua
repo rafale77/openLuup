@@ -6,7 +6,7 @@ local wsapi = require "openLuup.wsapi"
 
 local ABOUT = {
   NAME          = "shelly_cgi",
-  VERSION       = "2021.03.05",
+  VERSION       = "2021.03.10",
   DESCRIPTION   = "Shelly-like API for relays and scenes, and Shelly MQTT bridge",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2020-2021 AKBooer",
@@ -46,9 +46,8 @@ local chdev     = require "openLuup.chdev"            -- to create new bridge de
 
 local SID = {
     hag       = "urn:micasaverde-com:serviceId:HomeAutomationGateway1",   -- run scene
-    hadevice  = "urn:micasaverde-com:serviceId:HaDevice1",                -- LastUpdate
+    hadevice  = "urn:micasaverde-com:serviceId:HaDevice1",                -- LastUpdate, Toggle
     switch    = "urn:upnp-org:serviceId:SwitchPower1",
-    toggle    = "urn:micasaverde-com:serviceId:HaDevice1",
     scene     = "urn:micasaverde-com:serviceId:SceneController1",
     energy    = "urn:micasaverde-com:serviceId:EnergyMetering1",
 
@@ -95,7 +94,7 @@ end
 local turn = {
     on      = function (info) call_action (info, SID.switch, "SetTarget", {newTargetValue = '1'}, info.id) end,
     off     = function (info) call_action (info, SID.switch, "SetTarget", {newTargetValue = '0'}, info.id) end,
-    toggle  = function (info) call_action (info, SID.toggle, "ToggleState", {}, info.id) end,
+    toggle  = function (info) call_action (info, SID.hadevice, "ToggleState", {}, info.id) end,
   }
 
 local function simple()
@@ -156,20 +155,20 @@ function run(wsapi_env)
   local command = req.script_name
   local action, path = command: match "/(%w+)/?(.*)"
   local id = tonumber(path: match "^%d+")
-  
+
   local ol = luup.openLuup
-  local finders = { 
+  local finders = {
       relay = ol.find_device,
       scene = ol.find_scene,
     }
   local finder = finders[action]
-    
+
   if not id and finder then         -- try device/scene by name
     local name = wsapi.util.url_decode (path: match "^[^/%?]+")
     id = finder {name = name}
     print ("name:", name, "id:", id, type(id))
   end
-  
+
   local info = {command = command, id = id, parameters = req.GET}
   local fct = dispatch[action] or unknown
 
