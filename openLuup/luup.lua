@@ -1,6 +1,6 @@
 local ABOUT = {
   NAME          = "openLuup.luup",
-  VERSION       = "2021.03.05",
+  VERSION       = "2021.03.19",
   DESCRIPTION   = "emulation of luup.xxx(...) calls",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2021 AKBooer",
@@ -82,6 +82,8 @@ local ABOUT = {
 -- 2021.01.31  add MQTT to register_handler() protocol
 -- 2021.02.03  add luup.openLuup.find_device() by attribute: name / id / altid / etc...
 -- 2021.03.05  add luup.openLuup.find_scene()
+-- 2021.03.19  add optional parameter to request_handler() (thanks @therealdb)
+--             see: https://smarthome.community/topic/316/openluup-mqtt-server/81
 
 
 local logs          = require "openLuup.logs"
@@ -790,8 +792,8 @@ so that this single call may be used for a number of different types of callback
   luup.register_handler ("myHandler", "me@openLuup.local")
 
 --]]
-local function register_handler (...)
-  local global_function_name, request_name = parameters ({"string", "string"}, ...)
+local function register_handler (g, r, parameter)
+  local global_function_name, request_name = parameters ({"string", "string"}, g, r)
   local fct = entry_point (global_function_name, "luup.register_handler")
   if fct then
     -- fixed callback context - thanks @reneboer
@@ -810,7 +812,7 @@ local function register_handler (...)
         }
       local scheme = valid[protocol: lower()]
       if scheme then
-        scheme.register_handler (fct, address)
+        scheme.register_handler (fct, address, parameter)
       else
         _log ("ERROR, invalid register_handler protocol: " .. request_name)
       end
@@ -1150,26 +1152,27 @@ local version = userdata.attributes.BuildVersion: match "*([^*]+)*"
 local a,b,c = version: match "(%d+)%.(%d+)%.(%d+)"
 local version_branch, version_major, version_minor = tonumber(a), tonumber(b), tonumber(c)
 
-return {
+local openLuup = setmetatable ({    -- 2018.06.23, 2018.07.18 was true, now {} ... to indicate not a Vera (for plugin developers)
+  -- openLuup-specific API extensions go here...
+  bridge = chdev.bridge,      -- 2020.02.12  Bridge utilities
+  find_device = find_device,  -- 2021.02.03  find device by attribute: name / id / altid / etc...
+  find_scene = find_scene,    -- 2021.03.05  find scene by name
+  req_table  = nil,           -- 2020.07.04  set in init.lua
+},{
+  __index = function (self, name) -- 2020.06.28
+    local dispatch = {
+      cpu_table  = function() return time_table "cpu(s)"  end,
+      wall_table = function() return time_table "wall(s)" end,
+    }
+    local fct = dispatch[name]
+    if fct then return fct() end
+  end
+})
+
+
+local luup = {
 
     -- constants: really not expected to be changed dynamically
-
-    openLuup = setmetatable ({    -- 2018.06.23, 2018.07.18 was true, now {} ... to indicate not a Vera (for plugin developers)
-      -- openLuup-specific API extensions go here...
-      bridge = chdev.bridge,      -- 2020.02.12  Bridge utilities
-      find_device = find_device,  -- 2021.02.03  find device by attribute: name / id / altid / etc...
-      find_scene = find_scene,    -- 2021.03.05  find scene by name
-      req_table  = nil,           -- 2020.07.04  set in init.lua
-    },{
-      __index = function (self, name) -- 2020.06.28
-        local dispatch = {
-          cpu_table  = function() return time_table "cpu(s)"  end,
-          wall_table = function() return time_table "wall(s)" end,
-        }
-        local fct = dispatch[name]
-        if fct then return fct() end
-      end
-    }),
 
     hw_key              = "--hardware key--",
     event_server        = '',
@@ -1233,5 +1236,7 @@ return {
 --    xj                  = {xml_node_text = function: 0xbc7b78} -- "what is this?",
 
 }
+
+return setmetatable (luup, {__index = {openLuup = openLuup}})
 
 -----------

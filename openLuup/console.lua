@@ -4,7 +4,7 @@ module(..., package.seeall)
 
 ABOUT = {
   NAME          = "console.lua",
-  VERSION       = "2021.03.11",
+  VERSION       = "2021.03.20",
   DESCRIPTION   = "console UI for openLuup",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2021 AKBooer",
@@ -89,7 +89,9 @@ local ABOUTopenLuup = luup.devices[2].environment.ABOUT   -- use openLuup about,
 
 -- 2021.01.09  developing scene UI
 -- 2021.01.31  add MQTT server
--- 2021.03.11 @rafale77 change to slider position variable
+-- 2021.03.11  @rafale77 change to slider position variable
+-- 2021.03.18  add log_analysis() to pages.log
+-- 2021.03.20  add pages.required for prerequisites and plugin dependencies
 
 
 --  WSAPI Lua CGI implementation
@@ -222,7 +224,7 @@ end
 local page_groups = {
     ["Apps"]      = {"plugins_table", "app_store", "luup_files", "required_files"},
     ["Historian"] = {"summary", "cache", "database", "orphans"},
-    ["System"]    = {"parameters", "top_level", "all_globals", "states", "sandboxes", "RELOAD"},
+    ["System"]    = {"parameters", "top_level", "all_globals", "states", "required", "sandboxes", "RELOAD"},
     ["Device"]    = {"control", "attributes", "variables", "actions", "events", "globals", "user_data"},
     ["Scene"]     = {"header", "triggers", "timers", "history", "lua", "group_actions", "json"},
     ["Scheduler"] = {"running", "completed", "startup", "plugins", "delays", "watches"},
@@ -290,6 +292,13 @@ local function nice (x, maxlength)
   local number = tonumber(s)
   if number and number > 1234567890 then s = todate (number) end
   return truncate (s, maxlength or 50)
+end
+
+-- add thousands comma to numbers
+local ThousandsSeparator = luup.attr_get "ThousandsSeparator" or ','
+local function commas (n, ...)
+  local a, b = tostring (n or 0): match "(%d-)(%d?%d?%d)$"
+  return a ~= '' and commas (a, b, ...) or table.concat ({b, ...}, ThousandsSeparator)
 end
 
 local function dev_or_scene_name (d, tbl)
@@ -625,7 +634,7 @@ end
 -----------------------------
 
 local function html5_title (...) return xhtml.h4 {...} end
-local function red (x) return xhtml.span {class = "w3-red", x}  end
+local function red (...) return xhtml.span {class = "w3-red", ...}  end
 local function status_number (n) if n ~= 200 then return red (n) end; return n end
 local function page_wrapper (title, ...) return xhtml.div {html5_title (title), ...} end
 
@@ -1014,6 +1023,34 @@ function pages.states ()
   return page_wrapper("Device States (defined by service file short_names)", tbl)
 end
 
+function pages.required ()
+  local columns = {"module","version"}
+  local reqs = luup.openLuup.req_table
+  local versions = reqs.versions
+  local vs = {}
+  local wanted = {"lfs", "ltn12", "md5", "mime", "socket", "ssl"}
+  for _, n in pairs (wanted) do
+    local v = versions[n]
+    if v then vs[#vs+1] = {n, v} end
+  end
+  local tbl = create_table_from_data (columns, vs)
+
+  local byp = {}
+  local unwanted = {[0] = true, versions = true}
+  for plugin, list in sorted (reqs) do
+    if not unwanted[plugin] then
+      byp[#byp+1] = {{xhtml.strong {dev_or_scene_name (plugin, luup.devices)}, colspan = 2}}
+      for n in sorted (list) do
+        byp[#byp+1] = {'', n}
+      end
+    end
+  end
+  local tbl2 = create_table_from_data (nil, byp)
+
+  return page_wrapper("Required modules",
+    xhtml.h5 "Prerequisites", tbl,
+    xhtml.h5 "Required by Plugin", tbl2)
+end
 
 -- backups
 function pages.backups ()
@@ -1077,6 +1114,28 @@ end
 
 --------------------------------
 
+-- 2021.03.18  analyze time gaps in log
+local function log_analysis (log)
+  local n, at = 0, ''
+  local max, old = 0
+  local datetime = "%s %s:%s:%s"
+  for l in log: gmatch "[^%c]+" do
+    n = n + 1
+    local YMD, h,m,s = l: match "^%c*(%d+%-%d+%-%d+)%s+(%d+):(%d+):(%d+%.%d+)"
+    if YMD then
+      local new = 60*(24*h+m)+s
+      local dif = new - (old or new)
+      if dif > max then
+        max = dif
+        at = datetime: format (YMD, h,m,s)
+      end
+      old = new
+    end
+  end
+  max = math.floor (max + 0.5)
+  return n, max, at
+end
+
 function pages.log (p)
   local page = p.page or ''
   local name = luup.attr_get "openLuup.Logfile.Name" or "LuaUPnP.log"
@@ -1091,7 +1150,14 @@ function pages.log (p)
   if f then
     local x = f:read "*a"
     f: close()
-    pre = xhtml.pre {x}
+    local n, max, at = log_analysis (x)     -- 2021.03.18
+    local warning = ''
+    if max > 122 then
+      warning = red (" ––– Large gap in log: ", max, "s @ ", at, " –––")
+    end
+    pre = xhtml.div {
+      xhtml.span {"# lines: ", n, warning},
+      xhtml.pre {x}}
   end
   local end_of_page_buttons = page_group_buttons (page)
   return page_wrapper(name, pre, xhtml.div {class="w3-container w3-row w3-margin-top",
@@ -1195,10 +1261,18 @@ function pages.mqtt ()
   end
   local tbl = create_table_from_data ({"topic", "#internal subscribers", "#external subscribers" }, data)
 
+  local broker = {}
+  for n, v in sorted (mqtt.statistics) do
+    broker[#broker+1] = {n, commas (v)}
+  end
+  local stats = create_table_from_data ({}, broker)
   return xhtml.div {
       html5_title "MQTT QoS 0 server",
 --      selection,
-      xhtml.div {class="w3-rest w3-panel", tbl} }
+    xhtml.div {class="w3-rest w3-panel",
+      xhtml.h5 "Server statistics:", stats,
+      xhtml.h5 "Subscribed topics:",
+      tbl }}
 
 end
 

@@ -1,6 +1,6 @@
 local ABOUT = {
   NAME          = "openLuup.mqtt",
-  VERSION       = "2021.03.11",
+  VERSION       = "2021.03.20",
   DESCRIPTION   = "MQTT v3.1.1 QoS 0 server",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2020-2021 AKBooer",
@@ -30,6 +30,13 @@ local ABOUT = {
 -- 2021.01.31   original version
 -- 2021.02.17   add login credentials
 -- 2021.03.02   handle all wildcards ending with #
+-- 2021.03.14   add TryPrivate flag in connection protocol for server bridging with Mosquitto (thanks @Buxton)
+--              see: https://smarthome.community/topic/316/openluup-mqtt-server/74
+--              and: https://mosquitto.org/man/mosquitto-conf-5.html
+-- 2021.03.17   add UDP -> MQTT bridge
+-- 2021.03.19   add extra parameter to register_handler() (thanks @therealdb)
+--              see: https://smarthome.community/topic/316/openluup-mqtt-server/81
+-- 2021.03.20   EXTRA checks with socket.select() to ensure socket is OK to send
 
 
 -- see OASIS standard: http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.pdf
@@ -39,12 +46,16 @@ local logs      = require "openLuup.logs"
 local tables    = require "openLuup.servertables"     -- for myIP
 local ioutil    = require "openLuup.io"               -- for core server functions
 local scheduler = require "openLuup.scheduler"
+local socket    = require "socket"                    -- for socket.select()
+
 
 --  local _log() and _debug()
 local _log, _debug = logs.register (ABOUT)
 
 local iprequests = {}
 
+local empty = setmetatable ({}, {__newindex = function() error ("read-only", 2) end})
+local select = socket.select
 
 -------------------------------------------
 --
@@ -352,6 +363,9 @@ function parse.CONNECT(message, credentials)
   
   -- protocol level should be 4 for MQTT 3.1.1
   local protocol_level = message: read_bytes (1) : byte()         -- byte 7
+  
+  local TryPrivate = math.floor (protocol_level / 128)            -- 2021.03.14 mask off bit #7 used by Mosquitto
+  protocol_level = protocol_level % 128  
   if protocol_level ~= 4 then 
     return nil, "Protocol level is not 3.1.1"
   end
@@ -402,6 +416,8 @@ function parse.CONNECT(message, credentials)
       WillMessage = WillMessage,
       UserName = Username,
       Password = Password,
+      TryPrivate = TryPrivate,        -- 2021.03.14
+      KeepAlive = KeepAlive,
     }
   
   _debug ("ClientId: " .. ClientId)
@@ -651,10 +667,11 @@ local subscriptions = {} do
   end
 
   -- register an openLuup-side subscriber to a single topic
-  function methods: register_handler (callback, topic)
+  function methods: register_handler (callback, topic, parameter)
     self: subscribe {
       callback = callback, 
       devNo = scheduler.current_device (),
+      parameter = parameter,
       topic = topic,
       count = 0,
     }
@@ -674,12 +691,21 @@ local subscriptions = {} do
       _log (message: format (client.MQTT_connect_payload.ClientId or '?', topic, name))
     end
   end
-
+  
   function methods: send_to_client (client, message)
     local ok, err = true
     local closed = client.closed            -- client.closed is created by io.server
     if not closed then
-      ok, err = client: send (message)      -- don't try to send to closed socket
+      
+      -- EXTRA checks to ensure socket is OK to send
+      local s = {client}
+      local _, x = select (empty, s, 0)      -- check OK to send, with no delay
+      ok, err = #x > 0, "socket.select() 'not ready to send'"
+      --
+      
+      if ok then
+        ok, err = client: send (message)      -- don't try to send to closed socket
+      end
     end
     if closed or not ok then
       self: close_and_unsubscribe_from_all (client, err)
@@ -705,7 +731,7 @@ local subscriptions = {} do
         s.count = (s.count or 0) + 1
         local ok, err
         if s.callback then
-          ok, err = scheduler.context_switch (s.devNo, s.callback, TopicName, ApplicationMessage)
+          ok, err = scheduler.context_switch (s.devNo, s.callback, TopicName, ApplicationMessage, s.parameter)
         elseif s.client then
           message = message or MQTT_packet.PUBLISH (TopicName, ApplicationMessage)
           ok, err = self: send_to_client (s.client, message) -- publish to external subscribers
@@ -877,6 +903,20 @@ local function start (config)
       Password = config.Password or '',
     }
 
+  -- callback function is called with (port, {datagram = ..., ip = ...}, "udp")
+  -- datagram format is topic/=/message
+  local function UDP_MQTT_bridge (_, data)
+    local topic, message = data.datagram: match "^(.-)/=/(.+)"
+    if topic then 
+      subscriptions: publish (topic, message) 
+    end
+
+  end
+  
+  if tonumber (config.Bridge_UDP) then                  -- start UDP-MQTT bridge
+    ioutil.udp.register_handler (UDP_MQTT_bridge, config.Bridge_UDP)
+  end
+  
   local function MQTTservlet (client)
     return function () incoming (client, credentials, subscriptions) end
   end 
@@ -895,13 +935,8 @@ end
 
 
 --- return module variables and methods
-return {
+return setmetatable ({
     ABOUT = ABOUT,
-    
-    TEST = {          -- for testing only
-      packet = MQTT_packet,
-      parse = parse,
-    },
     
     -- constants
     myIP = tables.myIP,
@@ -914,8 +949,20 @@ return {
     new = new,       -- create another new MQTT server
     
     -- variables
-    iprequests  = iprequests,
-    subscribers = subscriptions,
     statistics = subscriptions.stats,
 
-}
+  },{
+  
+  -- hide some of the more esoteric data structures, only used internally by openLuup
+  
+    __index = {
+          
+    TEST = {          -- for testing only
+        packet = MQTT_packet,
+        parse = parse,
+      },
+    
+    iprequests  = iprequests,
+    subscribers = subscriptions,
+    
+  }})
