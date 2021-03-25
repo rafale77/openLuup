@@ -2,7 +2,7 @@ module ("http_async", package.seeall)
 
 ABOUT = {
   NAME          = "http_async",
-  VERSION       = "2019.05.10",
+  VERSION       = "2021.03.25",
   DESCRIPTION   = "Asynchronous HTTP(S) request for Vera and openLuup",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2018-19",
