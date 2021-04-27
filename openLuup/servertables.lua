@@ -1,4 +1,4 @@
-local VERSION = "2021.02.11"
+local VERSION = "2021.04.25"
 
 -- mimetypes
 -- 2016/04/14
@@ -29,11 +29,14 @@ local VERSION = "2021.02.11"
 -- 2019.06.11  cache control definitions moved here from servlet module
 
 -- 2021.01.31  MQTT codes added
+-- 2021.03.20  DEV and SID codes added
 
 
 -- http://forums.coronalabs.com/topic/21105-found-undocumented-way-to-get-your-devices-ip-address-from-lua-socket/
 
-local socket = require "socket"
+local socket  = require "socket"
+local xml     = require "openLuup.xml"
+
 
 local function myIP ()
   local mySocket = socket.udp ()
@@ -164,12 +167,6 @@ local cgi_prefix = {
     "metrics",      -- ditto
     "render",       -- ditto
 
-    "shelly",       -- for Shelly-like api
-    "relay",        -- ditto
-    "scene",        -- ditto
-    "status",       -- ditto
-    "settings",     -- ditto
-
     "ZWaveAPI",     -- Z-Wave.me Advanced API (requires Z-Way plugin)
     "ZAutomation",  -- Z-Wave.me Virtual Device API
   }
@@ -194,16 +191,8 @@ local cgi_alias = setmetatable ({
   },
 
   { __index = function (_, path)
-      -- Shelly-like API for switches and scenes
-      if path: match "^shelly"
-      or path: match "^relay"
-      or path: match "^scene"
-      or path: match "^settings"
-      or path: match "^status" then
-        return "openLuup/shelly_cgi.lua"
-
-      -- TODO: REMOVE special handling of Zway requests (all directed to same handler)
-      elseif path: match "^ZWaveAPI"
+    -- TODO: REMOVE special handling of Zway requests (all directed to same handler)
+    if path: match "^ZWaveAPI"
       or path: match "^ZAutomation" then
         return "cgi/zway_cgi.lua"
       end
@@ -272,11 +261,132 @@ local archive_rules = {
   }
 
 
+-- Device types and ServiceIds
+--
+-- usage:
+--   local DEV = tables.DEV {foo = "urn:...", garp = "urn:..."}    -- optionally, extend default table with local references
+--
+local meta = {
+  __call = function (self, args)
+    return setmetatable (args, {__index = self})
+  end}
+
+local DEV = setmetatable ({
+    light       = "D_BinaryLight1.xml",
+    dimmer      = "D_DimmableLight1.xml",
+    thermos     = "D_HVAC_ZoneThermostat1.xml",
+    motion      = "D_MotionSensor1.xml",
+    controller  = "D_SceneController1.xml",
+    combo       = "D_ComboDevice1.xml",
+    rgb         = "D_DimmableRGBLight1.xml",
+  }, meta)
+
+local SID = setmetatable ({
+
+    -- Short SIDs (as used by Historian / Grafana)
+    altui1                  = "urn:upnp-org:serviceId:altui1",
+    AltAppStore1            = "urn:upnp-org:serviceId:AltAppStore1",
+    Dimming1                = "urn:upnp-org:serviceId:Dimming1",
+    EnergyMetering1         = "urn:micasaverde-com:serviceId:EnergyMetering1",
+    HaDevice1               = "urn:micasaverde-com:serviceId:HaDevice1",
+    HomeAutomationGateway1  = "urn:micasaverde-com:serviceId:HomeAutomationGateway1",
+    HumiditySensor1         = "urn:micasaverde-com:serviceId:HumiditySensor1",
+    LightSensor1            = "urn:micasaverde-com:serviceId:LightSensor1",
+    SwitchPower1            = "urn:upnp-org:serviceId:SwitchPower1",
+    SecuritySensor1         = "urn:micasaverde-com:serviceId:SecuritySensor1",
+    SceneController1        = "urn:micasaverde-com:serviceId:SceneController1",
+    TemperatureSensor1      = "urn:upnp-org:serviceId:TemperatureSensor1",
+    ZWaveDevice1            = "urn:micasaverde-com:serviceId:ZWaveDevice1",
+
+    -- Very Short SIDs
+    altui     = "urn:upnp-org:serviceId:altui1",
+    appstore  = "urn:upnp-org:serviceId:AltAppStore1",
+    dimming   = "urn:upnp-org:serviceId:Dimming1",
+    energy    = "urn:micasaverde-com:serviceId:EnergyMetering1",
+    hadevice  = "urn:micasaverde-com:serviceId:HaDevice1",
+    hag       = "urn:micasaverde-com:serviceId:HomeAutomationGateway1",
+    humid     = "urn:micasaverde-com:serviceId:HumiditySensor1",
+    light     = "urn:micasaverde-com:serviceId:LightSensor1",
+    switch    = "urn:upnp-org:serviceId:SwitchPower1",
+    security  = "urn:micasaverde-com:serviceId:SecuritySensor1",
+    scene     = "urn:micasaverde-com:serviceId:SceneController1",
+    temp      = "urn:upnp-org:serviceId:TemperatureSensor1",
+    zwave     = "urn:micasaverde-com:serviceId:ZWaveDevice1",
+
+  }, meta)
+
+-----
+--
+-- device/service file synthesis utilities
 --
 
+
+-- synthesize SCPDURL and serviceType from serviceId
+local function svc_synth (sid)
+  local serviceType = "urn:schemas-%s:service:%s:%s"
+  local serviceFile = "S_%s.xml"
+
+  local id1, id2 = sid: match "urn:(.-):serviceId:(.+)"
+  if not id1 then
+    return serviceFile: format(sid), sid    -- special handling for openLuup no-nonsence SID
+  end
+  local id3 = id2: match "%D+%d?"
+  local sfile = serviceFile: format (id3)
+
+  local id4,idn = id3: match "^([%a_]+)(%d?)$"
+  local stype = serviceType: format(id1,id4,idn)
+  return sfile, stype
+end
+
+-- synthesize XML device file
+local function Device (d)
+  local x = xml.createDocument ()
+  local dev = {}
+  local special = {implementationList = true, serviceList = true, serviceIds = true}
+  for n,v in pairs (d) do
+    if not special[n] then
+      dev[#dev+1] = x[n] (v)
+    end
+  end
+  if d.serviceIds then
+    local slist = {}
+    for i, sid in ipairs (d.serviceIds) do
+      local SCPDURL, serviceType = svc_synth (sid)
+      slist[i] = x.service {x.serviceType (serviceType), x.serviceId (sid), x.SCPDURL(SCPDURL)}
+    end
+    dev[#dev+1] = x.serviceList (slist)
+  end
+  if d.serviceList then
+    local slist = {}
+    for i, s in ipairs (d.serviceList) do
+      slist[i] = x.service {x.serviceType (s[1]), x.serviceId (s[2]), x.SCPDURL(s[3])}
+    end
+    dev[#dev+1] = x.serviceList (slist)
+  end
+  if d.implementationList then
+    local flist = {}
+    for i,f in ipairs (d.implementationList) do
+      flist[i] = x.implementationFile (f)
+    end
+    dev[#dev+1] = x.implementationList (flist)
+  end
+  x: appendChild {
+    x.root {xmlns="urn:schemas-upnp-org:device-1-0",
+      x.specVersion {x.major "1", x.minor "0", x.minimus "auto-generated"},
+      x.device (dev)
+        }}
+  return tostring (x)
+end
+
+
+
+-----
 return {
 
     VERSION = VERSION,
+
+    DEV = DEV,
+    SID = SID,
 
     myIP            = myIP (),
     cgi_prefix      = cgi_prefix,
@@ -288,6 +398,11 @@ return {
     mqtt_codes      = mqtt_codes,         -- MQTT
     cache_control   = cache_control,      -- for file servlet
     archive_rules   = archive_rules,      -- for historian
+
+    -- utilities
+
+    Device = Device,
+
   }
 
 -----

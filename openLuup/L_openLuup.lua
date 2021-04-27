@@ -1,6 +1,6 @@
 ABOUT = {
   NAME          = "L_openLuup",
-  VERSION       = "2021.03.28",
+  VERSION       = "2021.04.26",
   DESCRIPTION   = "openLuup device plugin for openLuup!!",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2021 AKBooer",
@@ -60,7 +60,9 @@ ABOUT = {
 -- 2019.04.18  remove generic plugin_configuration functionality (no longer required)
 
 -- 2020.02.20  add EmptyRoom101 service action
--- 2020.07.04  UK Covid-19 Independence Day edition!
+
+-- 2021.04.06  add MQTT device/variable PUBLISH, and broker stats
+-- 2021.04.08  only PUBLISH if MQTT configured (thanks @ArcherS)
 
 
 local json        = require "rapidjson"
@@ -500,11 +502,14 @@ local function mqtt_sys_broker_stats ()
   stats["clients/total"] = nc
   stats["clients/connected"] = nc
   stats["clients/maximum"] = math.max (stats["clients/maximum"], nc)
-  for n, v in pairs (stats) do
-    mqtt.publish (topic..n, tostring(v))
+  if luup.attr_get "openLuup.MQTT" then   -- 2021.04.08 only publish if MQTT configured
+    for n, v in pairs (stats) do
+      mqtt.publish (topic..n, tostring(v))
+    end
   end
   timers.call_delay (mqtt_sys_broker_stats, 60, '', "MQTT $SYS/broker/#")
 end
+
 
 ------------------------
 --
@@ -702,7 +707,7 @@ function init (devNo)
     luup.log "starting MQTT $SYS/broker statistics"
     mqtt_sys_broker_stats ()
   end
-
+  
   set ("StartTime", luup.attr_get "openLuup.Status.StartTime")        -- 2018.05.02
   calc_stats ()
 

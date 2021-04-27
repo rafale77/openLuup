@@ -4,7 +4,7 @@ module(..., package.seeall)
 
 ABOUT = {
   NAME          = "console.lua",
-  VERSION       = "2021.03.28",
+  VERSION       = "2021.04.02",
   DESCRIPTION   = "console UI for openLuup",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2021 AKBooer",
@@ -117,6 +117,7 @@ local loader    = require "openLuup.loader"       -- for static data (devices pa
 local json      = require "rapidjson"             -- for console_menus.json
 local panels    = require "openLuup.panels"       -- for default console device panels
 local xml       = require "openLuup.xml"          -- for HTML constructors
+local tables    = require "openLuup.servertables" -- for serviceIds
 
 local xhtml     = xml.createHTMLDocument ()       -- factory for all HTML tags
 
@@ -194,18 +195,7 @@ server.add_callback_handlers {XMLHttpRequest =
 ----------------------------------------
 
 
-local SID = {
-  altui     = "urn:upnp-org:serviceId:altui1",                    -- 'DisplayLine1' and 'DisplayLine2'
-  appstore  = "urn:upnp-org:serviceId:AltAppStore1",
-  ha        = "urn:micasaverde-com:serviceId:HaDevice1", 		      -- 'BatteryLevel'
-  switch    = "urn:upnp-org:serviceId:SwitchPower1",              -- on/off control
-  dimming   = "urn:upnp-org:serviceId:Dimming1",                  -- slider control
-  security  = "urn:micasaverde-com:serviceId:SecuritySensor1",    -- arm/disarm control
-  temp      = "urn:upnp-org:serviceId:TemperatureSensor1",
-  humid     = "urn:micasaverde-com:serviceId:HumiditySensor1",
-  light     = "urn:micasaverde-com:serviceId:LightSensor1",
-  gateway   = "urn:micasaverde-com:serviceId:HomeAutomationGateway1",
-}
+local SID = tables.SID
 
 local _log    -- defined from WSAPI environment as wsapi.error:write(...) in run() method.
 
@@ -1128,34 +1118,36 @@ local function log_analysis (name)
   local logs = {}         -- list of log sections
   local errlog = {}       -- list of just error lines
 
-  for l in io.lines (name) do
+  if lfs.attributes (name) then
 
-    n = n + 1
-    local err = l: lower(): match "%serror:?%s"
-    if err then
-      errlog[#errlog+1] = l
-    end
-    if err ~= mode then
-      log = {class = err and "w3-text-red" or nil}
-      logs[#logs+1] = log
-      mode = err
-    end
-    log[#log+1] = l
+    for l in io.lines (name) do
 
-    local YMD, h,m,s = l: match "^%c*(%d+%-%d+%-%d+)%s+(%d+):(%d+):(%d+%.%d+)"
-    if YMD then
-      local new = 60*(24*h+m)+s
-      local dif = new - (old or new)
-      if dif > max then
-        max = dif
-        at = datetime: format (YMD, h,m,s)
+      n = n + 1
+      local err = l: lower(): match "%serror:?%s"
+      if err then
+        errlog[#errlog+1] = l
       end
-      old = new
+      if err ~= mode then
+        log = {class = err and "w3-text-red" or nil}
+        logs[#logs+1] = log
+        mode = err
+      end
+      log[#log+1] = l
+
+      local YMD, h,m,s = l: match "^%c*(%d+%-%d+%-%d+)%s+(%d+):(%d+):(%d+%.%d+)"
+      if YMD then
+        local new = 60*(24*h+m)+s
+        local dif = new - (old or new)
+        if dif > max then
+          max = math.floor (dif + 0.5)
+          at = datetime: format (YMD, h,m,s)
+        end
+        old = new
+      end
     end
 
   end
 
-  max = math.floor (max + 0.5)
   return logs, n, max, at, errlog
 end
 
@@ -1800,7 +1792,7 @@ local function device_panel (self)          -- 2019.05.12
     if self.attributes.bookmark == "1" then flag = unicode.black_star end
     local bookmark = xhtml.a {class = "nodec w3-hover-opacity", href=selfref("action=bookmark&dev=", id), flag}
 
-    local battery = (((self.services[SID.ha] or empty) .variables or empty) .BatteryLevel or empty) .value
+    local battery = (((self.services[SID.hadevice] or empty) .variables or empty) .BatteryLevel or empty) .value
     battery = battery and (battery .. '%') or ' '
     local state = self: status_get()
     -- states correspond to the scheduler job states
@@ -3222,7 +3214,7 @@ function pages.command_line (_, req)
   local h = xhtml
   local window = h.div {
     html5_title ("Output: ", h.span {style="font-family:Monaco; font-size:11pt;", command} ),
-    h.pre {style="height: 450px; border:1px grey; background-color:white; overflow:scroll", output} }
+    h.pre {style="height: 400px; border:1px grey; background-color:white; overflow:scroll", output} }
   local form = h.form {action= selfref (), method="post",
     h.input {class="w3-button w3-round w3-green w3-margin", value="Submit", type = "submit"},
     h.input {type = "text", style="width: 80%;", name ="command", onfocus="this.select();",
@@ -3275,7 +3267,7 @@ local a, div = xhtml.a, xhtml.div
 function pages.home (p)
   -- set house mode immediately, if provided
   if p.mode then
-    luup.call_action (SID.gateway, "SetHouseMode", {Mode = p.mode, Now=1}, 0)
+    luup.call_action (SID.hag, "SetHouseMode", {Mode = p.mode, Now=1}, 0)
   end
   -- create a list of all the page groups referenced by current menu structure
   local group_names = {}

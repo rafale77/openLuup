@@ -1,6 +1,6 @@
 local ABOUT = {
   NAME          = "openLuup.luup",
-  VERSION       = "2021.03.19",
+  VERSION       = "2021.04.26",
   DESCRIPTION   = "emulation of luup.xxx(...) calls",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2021 AKBooer",
@@ -84,6 +84,8 @@ local ABOUT = {
 -- 2021.03.05  add luup.openLuup.find_scene()
 -- 2021.03.19  add optional parameter to request_handler() (thanks @therealdb)
 --             see: https://smarthome.community/topic/316/openluup-mqtt-server/81
+-- 2021.04.04  change pattern search in register_handler() for xxx: prefixes (was rejecting strings with ':')
+-- 2021.04.16  openLuup virtualization of device variables
 
 
 local logs          = require "openLuup.logs"
@@ -95,10 +97,11 @@ local devutil       = require "openLuup.devices"
 local Device_0      = require "openLuup.gateway"
 local timers        = require "openLuup.timers"
 local userdata      = require "openLuup.userdata"
-local loader        = require "openLuup.loader"     -- for shared environment and compiler
-local smtp          = require "openLuup.smtp"       -- for register_handler to work with email
-local mqtt          = require "openLuup.mqtt"       -- for register_handler to work with MQTT
-local historian     = require "openLuup.historian"  -- for luup.variable_get() to work with historian
+local loader        = require "openLuup.loader"       -- for shared environment and compiler
+local smtp          = require "openLuup.smtp"         -- for register_handler to work with email
+local mqtt          = require "openLuup.mqtt"         -- for register_handler to work with MQTT
+local historian     = require "openLuup.historian"    -- for luup.variable_get() to work with historian
+local tables        = require "openLuup.servertables" -- SID used in device variable virtualization
 
 -- luup sub-modules
 local chdev         = require "openLuup.chdev"
@@ -798,7 +801,7 @@ local function register_handler (g, r, parameter)
     _log (msg, "luup.register_handler")
 
     -- 2018.04.18  optional alphameric protocol prefix in register_handler request
-    local protocol, address = request_name: match "^(%a+):%s*([^:]+)$"     --  abc:xxx
+    local protocol, address = request_name: match "^(%a+):%s*(.+)"     --  abc:xxx
     if protocol then
       local valid = {                 -- 2018.04.23  format for easier reading
           ["mailto"]  = smtp,
@@ -1141,6 +1144,57 @@ end
 
 -----
 --
+-- virtualization of device variables
+-- 2021.04.25  functionality added to openLuup structure itself
+--
+
+local SID = tables.SID
+
+local function readonly (_, x) error ("ERROR - READONLY: attempt to create index " .. x, 2) end
+
+local dev_meta = {__newindex = readonly}
+
+function dev_meta:__index (dev)
+  
+  local svc_meta = {__newindex = readonly}
+        
+  function svc_meta:__index (sid)
+    sid = SID[sid] or sid
+    
+    local var_meta = {}
+    
+    function var_meta: __call (action)
+      return function (args)
+        return luup.call_action (sid, action, args, dev)
+      end
+    end
+
+    function var_meta:__index (var)
+      return luup.variable_get (sid, var, dev)
+    end
+    
+    function var_meta:__newindex (var, new)
+      new = tostring(new)
+      local old = self[var]
+      if old then
+        if old ~= new then
+          luup.devices[dev]: variable_set (sid, var, new, true)   -- not logged, but 'true' enables variable watch
+        end
+      else
+        luup.variable_set (sid, var, new, dev)        -- create and log
+      end
+    end
+
+    return setmetatable({}, var_meta)
+  end
+
+  return setmetatable ({}, svc_meta)
+end
+
+
+
+-----
+--
 -- export values and methods
 --
 
@@ -1148,22 +1202,22 @@ local version = userdata.attributes.BuildVersion: match "*([^*]+)*"
 local a,b,c = version: match "(%d+)%.(%d+)%.(%d+)"
 local version_branch, version_major, version_minor = tonumber(a), tonumber(b), tonumber(c)
 
-local openLuup = setmetatable ({    -- 2018.06.23, 2018.07.18 was true, now {} ... to indicate not a Vera (for plugin developers)
+local openLuup = {    -- 2018.06.23, 2018.07.18 was true, now {} ... to indicate not a Vera (for plugin developers)
   -- openLuup-specific API extensions go here...
   bridge = chdev.bridge,      -- 2020.02.12  Bridge utilities
   find_device = find_device,  -- 2021.02.03  find device by attribute: name / id / altid / etc...
   find_scene = find_scene,    -- 2021.03.05  find scene by name
-  req_table  = nil,           -- 2020.07.04  set in init.lua
-},{
-  __index = function (self, name) -- 2020.06.28
-    local dispatch = {
-      cpu_table  = function() return time_table "cpu(s)"  end,
-      wall_table = function() return time_table "wall(s)" end,
-    }
-    local fct = dispatch[name]
-    if fct then return fct() end
-  end
-})
+
+  -- 2021.04.16 moved from metatable
+  cpu_table  = function() return time_table "cpu(s)"  end,
+  wall_table = function() return time_table "wall(s)" end,
+
+   -- 2021.04.26  reserve placeholders (table is otherwise READONLY)
+  req_table = "replaced during init", 
+  mqtt      = "replaced during init",
+}
+
+setmetatable (openLuup, dev_meta)   -- enable virtualization of device variables and actions
 
 
 local luup = {
