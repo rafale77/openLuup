@@ -80,7 +80,7 @@ local ABOUT = {
 -- 2020.12.26  make status request honour dataversion number for variables (thanks @rigpapa)
 
 -- 2021.02.20  &id=reload, delay luup.reload() until after request completes (thanks @DesT)
-
+-- 2021.04.28  Implemented encode empty table as array using rapidjson
 
 local client        = require "openLuup.client"
 local server        = require "openLuup.server"
@@ -298,7 +298,7 @@ local function actions (_, p)
     end
   end
 
-  local j, err = json.encode {serviceList = S}
+  local j, err = json.encode ({serviceList = S}, {empty_table_as_array=true})
   j = j or {error = err or "unknown error"}
   return j, "application/json"
 end
@@ -308,7 +308,7 @@ end
 -- including information about devices in use and if the IP is blacklisted (ignored by the plug and play mechanism).  [NOT IMPLEMENTED]
 -- Optionally append timeout to specify the oldest IP request in seconds.  [NOT IMPLEMENTED]
 local function iprequests ()
-  local ips = json.encode({ip_requests = iprequests_table ()})
+  local ips = json.encode({ip_requests = iprequests_table ()}, {empty_table_as_array=true})
   return ips, "application/json"
 end
 
@@ -374,7 +374,7 @@ local function sdata(...)
     temperature = luup.attr_get "TemperatureFormat",
     version = luup.attr_get "BuildVersion",
   }
-  return json.encode (sdata) or 'error in sdata', "application/json"
+  return json.encode (sdata, {empty_table_as_array=true}) or 'error in sdata', "application/json"
 end
 --
 -- STATUS
@@ -502,7 +502,7 @@ local function status (_,p)
     status.startup = status_startup_table ()
   end
   --TODO: status.visible_devices = ?
-  return json.encode (status) or 'error in status', "application/json"
+  return json.encode (status, {empty_table_as_array=true}) or 'error in status', "application/json"
 end
 
 --
@@ -558,7 +558,7 @@ local function user_data (_,p)
       user_data2.static_data = static_data()
     end
     mime_type = "application/json"
-    result = json.encode (user_data2)
+    result = json.encode (user_data2, {empty_table_as_array=true})
   end
   return result, mime_type
 end
@@ -571,7 +571,7 @@ local function static ()
     static_data = static_data(),
   }
   local mime_type = "application/json"
-  local result = json.encode (sd)
+  local result = json.encode (sd, {empty_table_as_array=true})
   return result, mime_type
 end
 
@@ -734,7 +734,7 @@ local function action (_,p,f)
     local rootName = "u:"..p.action.."Response"
     result = {[rootName] = arguments}
     if f == "json" then
-      result = json.encode (result)
+      result = json.encode (result, {empty_table_as_array=true})
       mime_type = "application/json"
     else                                -- 2017.07.15 encode XML response from scratch
 --      result = xml.encode (result)
@@ -902,7 +902,7 @@ local function update_plugin (_,p)
   if meta then
     local sid = "urn:upnp-org:serviceId:AltAppStore1"
     local act = "update_plugin"
-    local arg = {metadata = json.encode (meta)}
+    local arg = {metadata = json.encode (meta, {empty_table_as_array=true})}
     local dev = device_present "urn:schemas-upnp-org:device:AltAppStore:1"
 
     _, errmsg = luup.call_action (sid, act, arg, dev)       -- actual install
