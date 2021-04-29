@@ -218,7 +218,7 @@ end
 
 function openLuup_storage_provider (_, p)
   local influx = "%s value=%s"
-  _debug (json.encode {Influx_DSP = {p}})
+  _debug (json.encode ({Influx_DSP = {p}}, {empty_table_as_array=true, pretty=true}))
   if InfluxSocket and p.measurement and p.new then
     InfluxSocket: send (influx: format (p.measurement, p.new))
   end
@@ -256,7 +256,7 @@ local function register_Data_Storage_Provider ()
   local arguments = {
     newName = "influx",
     newUrl = "http://127.0.0.1:3480/data_request?id=lr_openLuup_DSP",
-    newJsonParameters = json.encode (newJsonParameters),
+    newJsonParameters = json.encode (newJsonParameters, {empty_table_as_array=true, pretty=true}),
   }
 
   luup.call_action (SID.altui, "RegisterDataProvider", arguments, AltUI)
@@ -471,7 +471,7 @@ local function mqtt_dev_json (d)
   end
 
   local D = {[tostring(d.devNo)] = info}
-  local message = json.encode(D)
+  local message = json.encode(D, {empty_table_as_array=true, pretty=true})
   return message
 end
 
@@ -707,7 +707,7 @@ function init (devNo)
     luup.log "starting MQTT $SYS/broker statistics"
     mqtt_sys_broker_stats ()
   end
-  
+
   set ("StartTime", luup.attr_get "openLuup.Status.StartTime")        -- 2018.05.02
   calc_stats ()
 

@@ -195,7 +195,7 @@ luup.log "startup code completed"
   LuaTestCode  = '',    -- 2019.06.11
   LuaTestCode2 = '',
   LuaTestCode3 = '',
-  
+
   ThousandsSeparator = ',',   -- 2021.03.14
 
 }
@@ -719,7 +719,7 @@ local function json_user_data (localLuup)   -- refactored thanks to @explorer
     scenes[#scenes+1] = s.definition
   end
   --
-  return json.encode (data)   -- json text or nil, error message if any
+  return json.encode (data, {empty_table_as_array=true, pretty=true})   -- json text or nil, error message if any
 end
 
 -- save ()

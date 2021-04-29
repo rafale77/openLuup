@@ -66,14 +66,10 @@ local https     = require "ssl.https"
 local lfs       = require "lfs"
 --local ltn12     = require "ltn12"
 
-local json
+local json = require "rapidjson"
 local Vera = luup.attr_get "SvnVersion"
 
-if Vera then
-  json = require "L_ALTUIjson"    -- we will always run with AltUI present
-else
-  json = require "openLuup.json"  -- AltUI may NOT be present (eg. before it's installed)
-end
+
 
 
 https.TIMEOUT = 5
@@ -499,7 +495,7 @@ function update_plugin_run(args)
     return false                            -- failure
   end
 
-  _debug ((json.encode(meta)))
+  _debug ((json.encode(meta, {empty_table_as_array=true, pretty=true})))
 
   local d = meta.devices
   local p = meta.plugin

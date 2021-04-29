@@ -105,8 +105,8 @@ local D_openLuup_dev = Device {
         serviceIds  = { "openLuup" },
         implementationList = {"I_openLuup.xml"}}
 
-local D_openLuup_json = json.encode {
-  flashicon = "https://avatars.githubusercontent.com/u/4962913",  -- not used, but here for reference
+local D_openLuup_json = json.encode ({
+--  flashicon = "https://avatars.githubusercontent.com/u/4962913",  -- not used, but here for reference
   default_icon = "openLuup.svg",
   DeviceType = "openLuup",
   Tabs = {{
@@ -163,7 +163,7 @@ local D_openLuup_json = json.encode {
       },
 
     }
-  }
+  }, {empty_table_as_array=true, pretty=true})
 
 local I_openLuup_impl do
   local x = xml.createDocument ()
@@ -475,7 +475,7 @@ local D_VeraBridge_dev  = Device {
         serviceIds      = { SID.VeraBridge },
         implementationList = {"I_VeraBridge.xml"}}
 
-local D_VeraBridge_json = json.encode {
+local D_VeraBridge_json = json.encode ({
   flashicon = "http://raw.githubusercontent.com/akbooer/openLuup/master/icons/VeraBridge.png",
   default_icon = "VeraBridge.svg",
   DeviceType = "VeraBridge",
@@ -493,7 +493,7 @@ local D_VeraBridge_json = json.encode {
         Display (50,60, 75,20, SID.altui, "DisplayLine2")),
       ControlGroup (2, "variable", 0,3,
         Display (50,100, 75,20, SID.VeraBridge,"Version")),
-      }}}}
+      }}}}, {empty_table_as_array=true, pretty=true})
 
 
 local I_VeraBridge_impl do
@@ -567,7 +567,7 @@ local D_ZWay_xml = Device {
         implementationList = {"I_ZWay2.xml"}}
 
 
-local D_ZWay_json = json.encode {
+local D_ZWay_json = json.encode ({
   default_icon = "Z-Wave.me.png",
   DeviceType = "ZWay",
   Tabs = {{
@@ -587,7 +587,7 @@ local D_ZWay_json = json.encode {
       ControlGroup (2, "label", 0,4,
         Display (50,160, 75,20),
         Label ("configure", '<a href="/cgi/zway_cgi.lua" target="_blank">Configure ZWay child devices</a>')),
-      }}}}
+      }}}}, {empty_table_as_array=true, pretty=true})
 
 local I_ZWay2_xml do
   local x = xml.createDocument ()
@@ -654,10 +654,10 @@ local D_ShellyBridge_xml = Device {
       }
 
 
-local D_ShellyBridge_json = json.encode {
+local D_ShellyBridge_json = json.encode ({
     default_icon = "https://pbs.twimg.com/profile_images/1317058087929450505/Vw2yKX4S.jpg",
     DeviceType = "ShellyBridge",
-  }
+  }, {empty_table_as_array=true, pretty=true})
 
 local I_ShellyBridge_impl do
   local x = xml.createDocument ()
@@ -681,11 +681,11 @@ local D_GenericShellyDevice_xml = Device {
         staticJson   = "D_GenericShellyDevice.json",
       }
 
-local D_GenericShellyDevice_json = json.encode {
+local D_GenericShellyDevice_json = json.encode ({
         default_icon = "https://cdn6.aptoide.com/imgs/6/a/c/6acc4942157e022670fa153739730cf9_icon.png",
 --        default_icon = "https://pbs.twimg.com/profile_images/1317058087929450505/Vw2yKX4S.jpg",
         DeviceType = "GenericShellyDevice",
-      }
+      }, {empty_table_as_array=true, pretty=true})
 
 -----
 
@@ -708,10 +708,10 @@ local D_TasmotaBridge_xml = Device {
       }
 
 
-local D_TasmotaBridge_json = json.encode {
+local D_TasmotaBridge_json = json.encode ({
     default_icon = "https://tasmota.github.io/docs/_media/logo.svg",
     DeviceType = "TasmotaBridge",
-  }
+  }, {empty_table_as_array=true, pretty=true})
 
 local I_TasmotaBridge_impl do
   local x = xml.createDocument ()
@@ -733,11 +733,11 @@ local D_GenericTasmotaDevice_xml = Device {
         staticJson   = "D_GenericTasmotaDevice.json",
       }
 
-local D_GenericTasmotaDevice_json = json.encode {
+local D_GenericTasmotaDevice_json = json.encode ({
 --        default_icon = "https://cdn6.aptoide.com/imgs/6/a/c/6acc4942157e022670fa153739730cf9_icon.png",
 --        default_icon = "https://pbs.twimg.com/profile_images/1317058087929450505/Vw2yKX4S.jpg",
         DeviceType = "GenericTasmotaDevice",
-      }
+      }, {empty_table_as_array=true, pretty=true})
 
 -----
 
@@ -831,7 +831,7 @@ local D_BinaryLight1_json do
                 Command = Command ("SetTarget", { {Name = "newTargetValue", Value = "0" }}),
                 ControlCode = "power_off"
               }}}}}}}
-  D_BinaryLight1_json = json.encode (j)
+  D_BinaryLight1_json = json.encode (j, {empty_table_as_array=true, pretty=true})
 end
 
 
@@ -1266,7 +1266,7 @@ local altui_console_menus_json = [==[
 ]==]
 
 
-local openLuup_menus_json = json.encode {
+local openLuup_menus_json = json.encode ({
   comment = "JSON to define AltUI-style console menu structure",
   menus = {
     {"openLuup",  {"About", "hr", "System", "Historian", "Scheduler", "Servers"} },
@@ -1278,7 +1278,7 @@ local openLuup_menus_json = json.encode {
                        "hr", "Backups", "Images", "Trash"} },
     {"Logs",      {"Log", "hr", "Log.1","Log.2", "Log.3", "Log.4", "Log.5", "hr", "Startup Log"} }
   }
-}
+}, {empty_table_as_array=true, pretty=true})
 
 
 

@@ -167,7 +167,7 @@ do -- set attributes, possibly decoding if required
     },
     Console = {
       Menu = "",           -- add user-defined menu JSON definition file here
-      Ace_URL = "https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.js",
+      Ace_URL = "https://192.168.0.51:3480/altui/ace.js",
       EditorTheme = "eclipse",
     },
     DataStorageProvider = {
@@ -250,7 +250,7 @@ do -- STARTUP
     require "openLuup.L_AltAppStore"                    -- manually load the plugin updater
     AltAppStore_init (2)                                -- give it a device to work with
     local meta = userdata.plugin_metadata (8246)        -- AltUI plugin number
-    local metadata = json.encode (meta)                 -- get the metadata
+    local metadata = json.encode (meta, {empty_table_as_array=true, pretty=true})                 -- get the metadata
     update_plugin_run {metadata = metadata}             -- <run> phase
     repeat until update_plugin_job () ~= 0              -- <job> phase
   end
