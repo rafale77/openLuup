@@ -119,7 +119,7 @@ end
 
 local http_handler = {    -- the data_request?id=... handler dispatch list
   TEST = {
-      callback = function (...) return json.encode {...}, mimetype.json end    -- just for testing
+      callback = function (...) return json.encode ({...}, {empty_table_as_array=true, pretty=true}), mimetype.json end    -- just for testing
     },
   }
 

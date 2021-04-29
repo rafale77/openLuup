@@ -133,7 +133,7 @@ local function jsonify(data, status, headers, jsonp)
   headers = headers or {}
 
   local body, errmsg = json.encode (data, {empty_table_as_array=true, pretty=true})
-  body = body or json.encode (){errors = {json = errmsg or "Unknown error"}}, {empty_table_as_array=true, pretty=true}) or
+  body = body or json.encode ({errors = {json = errmsg or "Unknown error"}}, {empty_table_as_array=true, pretty=true}) or
           '{"errors":{"json": "Unknown error"}}'
   if jsonp then
       headers['Content-Type'] = 'text/javascript'

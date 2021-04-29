@@ -479,7 +479,7 @@ local test
 
 function update_plugin_run(args)
 
---  p.metadata = p.metadata or json.encode (AltAppStore)     -- TESTING ONLY!
+--  p.metadata = p.metadata or json.encode (AltAppStore, {empty_table_as_array=true, pretty=true})     -- TESTING ONLY!
   test = false
   if args.test then
     _log "test <run> phase..."
