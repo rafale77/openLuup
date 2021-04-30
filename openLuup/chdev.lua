@@ -88,7 +88,7 @@ local BLOCKSIZE = 10000     -- size of device number blocks allocate to openLuup
 
 local function newindex (self, ...) rawset (getmetatable(self).__index, ...) end      -- put non-visible variables into meta
 
-local function jsonify (self) return (json.encode (self: state_table(), {empty_table_as_array=true, pretty=true})) or '?' end   -- return JSON device representation
+local function jsonify (self) return (json.encode (self: state_table(), {empty_table_as_array=true})) or '?' end   -- return JSON device representation
 
 -- generate a (fairly) unique UDN
 -- see: https://en.wikipedia.org/wiki/Universally_unique_identifier
