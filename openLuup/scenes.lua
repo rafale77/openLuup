@@ -114,7 +114,7 @@ local scene_environment = loader.shared_environment
 
 local function newindex (self, ...) rawset (getmetatable(self).__index, ...) end    -- put non-visible variables into meta
 
-local function jsonify (x) return (json.encode (x.definition, {empty_table_as_array=true})) or '?' end             -- return JSON scene representation
+local function jsonify (x) return (json.encode (x.definition, {empty_table_as_array=true, pretty=true})) or '?' end             -- return JSON scene representation
 
 -- format includes variables for main scene name, Lua code, and triggers
 local sceneLuaTemplate = [[

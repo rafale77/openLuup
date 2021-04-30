@@ -2080,7 +2080,7 @@ function pages.user_data (p)
     local j, err
     local dnum = tonumber (p.device) or 2
     local dtable = userdata.devices_table {[dnum] = d}
-    j, err = json.encode (dtable)
+    j, err = json.encode (dtable, {empty_table_as_array=true, pretty=true})
     local readonly = true
     return title .. " - JSON user_data",
 --      xhtml.div {class = "w3-panel w3-border", xhtml.pre {j or err} }
@@ -3017,7 +3017,7 @@ end
 
 function pages.app_json (p)
   local readonly = true
-  local info = json.encode (APPS[p.plugin] or empty)
+  local info = json.encode (APPS[p.plugin] or empty, {empty_table_as_array=true, pretty=true})
   return page_wrapper ("Alt App Store - JSON definition",
       xhtml.div {code_editor (info, 500, "json", readonly)})
 end
@@ -3089,7 +3089,7 @@ function pages.app_store (p, req)
     repository.versions = {[release] = {release = release}}  -- others are not relevant to the install
     meta.repository = repository
 
-    local metadata = json.encode (meta)
+    local metadata = json.encode (meta, {empty_table_as_array=true})
 --    print (metadata)
 
     local sid = SID.appstore
@@ -3107,7 +3107,7 @@ function pages.app_store (p, req)
     -- returns: error (number), error_msg (string), job (number), arguments (table)
     local _, errmsg, _, a = luup.call_action (sid, act, arg, dev)       -- actual install
 --    print ((json.encode {e,errmsg,j,a}))
-    local result = json.encode (a or {ERROR = errmsg})
+    local result = json.encode (a or {ERROR = errmsg}, {empty_table_as_array=true})
     _log (result)
     if errmsg then _log (errmsg) end
 

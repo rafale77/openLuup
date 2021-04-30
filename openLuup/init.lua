@@ -167,7 +167,7 @@ do -- set attributes, possibly decoding if required
     },
     Console = {
       Menu = "",           -- add user-defined menu JSON definition file here
-      Ace_URL = "https://192.168.0.51:3480/altui/ace.js",
+      Ace_URL = "http://192.168.0.51:3480/altui/ace.js",
       EditorTheme = "eclipse",
     },
     DataStorageProvider = {

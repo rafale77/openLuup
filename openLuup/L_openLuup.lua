@@ -471,7 +471,7 @@ local function mqtt_dev_json (d)
   end
 
   local D = {[tostring(d.devNo)] = info}
-  local message = json.encode(D, {empty_table_as_array=true})
+  local message = json.encode(D, {empty_table_as_array=true, pretty=true})
   return message
 end
 
