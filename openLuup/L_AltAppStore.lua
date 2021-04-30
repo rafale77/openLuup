@@ -479,7 +479,7 @@ local test
 
 function update_plugin_run(args)
 
---  p.metadata = p.metadata or json.encode (AltAppStore, {empty_table_as_array=true, pretty=true})     -- TESTING ONLY!
+--  p.metadata = p.metadata or json.encode (AltAppStore, {empty_table_as_array=true})     -- TESTING ONLY!
   test = false
   if args.test then
     _log "test <run> phase..."
@@ -495,7 +495,7 @@ function update_plugin_run(args)
     return false                            -- failure
   end
 
-  _debug ((json.encode(meta, {empty_table_as_array=true, pretty=true})))
+  _debug ((json.encode(meta, {empty_table_as_array=true})))
 
   local d = meta.devices
   local p = meta.plugin

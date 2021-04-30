@@ -119,7 +119,7 @@ end
 
 local http_handler = {    -- the data_request?id=... handler dispatch list
   TEST = {
-      callback = function (...) return json.encode ({...}, {empty_table_as_array=true, pretty=true}), mimetype.json end    -- just for testing
+      callback = function (...) return json.encode ({...}, {empty_table_as_array=true}), mimetype.json end    -- just for testing
     },
   }
 
@@ -379,7 +379,7 @@ local function exec_shelly_like_command (command, parameters)
 
   local reply, err = fct(info)       -- input and output parameters also returned (unencoded) in info
   if type(reply) == "table" then
-    reply, err = json.encode(reply, {empty_table_as_array=true, pretty=true})
+    reply, err = json.encode(reply, {empty_table_as_array=true})
   end
   return reply, err
 end

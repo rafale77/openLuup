@@ -91,7 +91,7 @@ function run (wsapi_env)
 
   local res = wsapi.response.new ()         -- use the response library to build the response!
 
-  local j, err = json.encode (original_MiOS_shell_script_returns, {empty_table_as_array=true, pretty=true})
+  local j, err = json.encode (original_MiOS_shell_script_returns, {empty_table_as_array=true})
 
   res:content_type "text/plain"
   res: write (j or err)                     -- return valid JSON, or error message

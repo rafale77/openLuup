@@ -411,7 +411,7 @@ local function create_children (devices, room_0)
       current[cloneId] = nil
     end
   end
-  if #list > 0 then luup.log ("creating device numbers: " .. json.encode(list, {empty_table_as_array=true, pretty=true})) end
+  if #list > 0 then luup.log ("creating device numbers: " .. json.encode(list, {empty_table_as_array=true})) end
 
   list = {}
   for n in pairs (current) do
@@ -426,7 +426,7 @@ local function create_children (devices, room_0)
 --
 --
   end
-  if #list > 0 then luup.log ("deleting device numbers: " .. json.encode(list, {empty_table_as_array=true, pretty=true})) end
+  if #list > 0 then luup.log ("deleting device numbers: " .. json.encode(list, {empty_table_as_array=true})) end
 
   build_families (devices)
   if something_changed then luup.reload() end
@@ -961,7 +961,7 @@ local function register_AltUI_Data_Storage_Provider ()
   local arguments = {
     newName = "Vera@" .. ip,
     newUrl = MirrorCallbackURL,
-    newJsonParameters = json.encode (newJsonParameters, {empty_table_as_array=true, pretty=true}),
+    newJsonParameters = json.encode (newJsonParameters, {empty_table_as_array=true}),
   }
 
   luup.call_action (SID.altui, "RegisterDataProvider", arguments, AltUI)

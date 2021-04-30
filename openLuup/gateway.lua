@@ -294,7 +294,7 @@ Device_0.services[SID].actions =
             if j.InstalledPlugins2 then
               for plug_id, info in pairs (j.InstalledPlugins2) do
                 _log ("InstalledPlugins2 ******* NOT IMPLEMENTED *******" .. plug_id)
-                _log (json.encode(info, {empty_table_as_array=true, pretty=true}))
+                _log (json.encode(info, {empty_table_as_array=true}))
                 _log "**********************"
               end
             end
